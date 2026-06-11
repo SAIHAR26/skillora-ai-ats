@@ -1,0 +1,234 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --aurora-base: #f2f0e6;
+    --aurora-ink: #0a0a0c;
+    --aurora-clay: #c3c0b4;
+    --aurora-gold: #38bdf8;
+    --aurora-sage: #5f6e5e;
+    --base-white: #ffffff;
+    --text-primary: #000000;
+    --text-secondary: #6c6c6c;
+    --border-light: #e5e5e5;
+    --border-medium: #d0d0d0;
+    --panel-fill: #f4f4f4;
+    --active-blue: #0071e3;
+    --success-green: #3dc75a;
+    --warning-orange: #f5a623;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 218 68% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 218 68% 35%;
+    --radius: 0rem;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--aurora-base);
+    color: var(--aurora-ink);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    word-break: keep-all;
+  }
+}
+
+@layer components {
+  .font-serif-display {
+    font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+  }
+
+  .font-geist-mono {
+    font-family: "Geist Mono", "Space Mono", ui-monospace, monospace;
+  }
+
+  .font-western-serif {
+    font-family: "Playfair Display", Georgia, serif;
+  }
+
+  .font-mono-data {
+    font-family: "Space Mono", "Courier New", monospace;
+  }
+
+  .liquid-glass {
+    background: rgba(255, 255, 255, 0.01);
+    background-blend-mode: luminosity;
+    backdrop-filter: blur(6px) saturate(140%);
+    -webkit-backdrop-filter: blur(6px) saturate(140%);
+    border: none;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1), 0 8px 32px rgba(0, 0, 0, 0.15);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .liquid-glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.4px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.15) 20%, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, 0.15) 80%, rgba(255, 255, 255, 0.5) 100%);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    opacity: 0.25;
+  }
+
+  .liquid-glass::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(ellipse 90% 40% at 50% 0%, rgba(255, 255, 255, 0.18) 0%, transparent 55%), radial-gradient(ellipse 60% 35% at 65% 10%, rgba(255, 255, 255, 0.08) 0%, transparent 50%);
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+}
+
+@layer utilities {
+  .grid-line-border {
+    border: 1px solid var(--border-color);
+  }
+
+  .dashboard-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: rgba(0, 0, 0, 0.1) 0px 10px 40px -10px;
+    padding: 24px;
+  }
+
+  .dashboard-sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    transition: all 0.15s ease;
+    text-decoration: none;
+  }
+
+  .dashboard-sidebar-link:hover {
+    background: var(--panel-fill);
+    color: var(--text-primary);
+  }
+
+  .dashboard-sidebar-link.active {
+    background: #e8f0fe;
+    color: var(--active-blue);
+  }
+}
+
+/* Custom scrollbar for dashboard */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d0d0d0;
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+/* Dot Grid Pulse Animation */
+@keyframes dotPulse {
+  0% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+  100% { opacity: 0.2; transform: scale(1); }
+}
+
+.dot-layer {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle at center, rgba(56, 189, 248, 0.3) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+  mix-blend-mode: overlay;
+}
+
+.layer-1 { animation: dotPulse 8s ease-in-out infinite; }
+.layer-2 { animation: dotPulse 12s ease-in-out infinite reverse; }
+.layer-3 { transform: rotate(45deg) scale(1.5); animation: dotPulse 15s ease-in-out infinite; }
+
+/* Kinetic Typography */
+.kinetic-section {
+  overflow: hidden;
+  padding: 100px 0;
+}
+
+.kinetic-line {
+  white-space: nowrap;
+  width: max-content;
+  display: flex;
+  gap: 40px;
+  will-change: transform;
+  font-size: clamp(36px, 10vw, 72px);
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 700;
+  color: var(--aurora-ink);
+}
+
+/* Auth page animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-pending { background: #fff3cd; color: #856404; }
+.status-scheduled { background: #e8f0fe; color: #1c4a96; }
+.status-completed { background: #d4edda; color: #155724; }
+.status-selected { background: #d4edda; color: #155724; }
+.status-rejected { background: #f8d7da; color: #721c24; }
+.status-shortlisted { background: #e8f0fe; color: #1c4a96; }
+.status-applied { background: #e2e3e5; color: #383d41; }
