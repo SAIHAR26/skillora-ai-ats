@@ -35,6 +35,21 @@ app.use((error, _req, res, _next) => {
   res.status(500).json({ message: error.message || "Internal server error" });
 });
 
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/users", require("./routes/users"));
+app.use("/api/recruiters", require("./routes/recruiters"));
+app.use("/api/candidates", require("./routes/candidates"));
+app.use("/api/jobs", require("./routes/jobs"));
+app.use("/api/applications", require("./routes/applications"));
+app.use("/api/interviews", require("./routes/interviews"));
+app.use("/api/notifications", require("./routes/notifications"));
+app.use("/api/complaints", require("./routes/complaints"));
+app.use("/api/opportunities", require("./routes/opportunities"));
+
+const { notFound, errorHandler } = require("./middleware/errorMiddleware");
+app.use(notFound);
+app.use(errorHandler);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
