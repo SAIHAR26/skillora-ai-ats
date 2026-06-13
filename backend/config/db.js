@@ -1,13 +1,16 @@
-// config/db.js
-
 const mongoose = require("mongoose");
 
 const connectDB = async () => {
+  if (!process.env.MONGO_URI) {
+    console.warn("MongoDB connection skipped: MONGO_URI is not configured");
+    return;
+  }
+
   try {
     await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ MongoDB Connected Successfully");
+    console.log("MongoDB connected successfully");
   } catch (error) {
-    console.error("❌ MongoDB Connection Failed");
+    console.error("MongoDB connection failed");
     console.error(error.message);
   }
 };
