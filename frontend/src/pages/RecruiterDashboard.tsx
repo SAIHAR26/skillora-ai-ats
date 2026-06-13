@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
 import {
@@ -37,6 +37,8 @@ import {
   mockMessages,
 } from "../data/mockData";
 import type { Job, Application } from "../data/mockData";
+import { fetchAiRankings, fetchAiTrainingSummary } from "../services/aiRanking";
+import type { AiRanking, AiTrainingSummary } from "../services/aiRanking";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -385,18 +387,68 @@ function ApplicationManagement() {
 
 // AI Ranking
 function AIRanking() {
-  const ranked = [...mockApplications].sort((a, b) => b.atsScore - a.atsScore);
+  const fallbackRankings: AiRanking[] = [...mockApplications]
+    .sort((a, b) => b.atsScore - a.atsScore)
+    .map((app) => ({
+      id: app.id,
+      candidateName: app.candidateName,
+      jobTitle: app.jobTitle,
+      company: app.company,
+      atsScore: app.atsScore,
+      status: app.status,
+      skills: [],
+      experience: "",
+      education: "",
+      location: "",
+      reasons: ["Using local sample data because the AI backend is not connected."],
+    }));
+  const [ranked, setRanked] = useState<AiRanking[]>(fallbackRankings);
+  const [summary, setSummary] = useState<AiTrainingSummary | null>(null);
+  const [source, setSource] = useState<"csv" | "mock">("mock");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all([fetchAiRankings(25), fetchAiTrainingSummary()])
+      .then(([rankingResponse, trainingSummary]) => {
+        if (cancelled) return;
+        if (rankingResponse.rankings.length > 0) {
+          setRanked(rankingResponse.rankings);
+          setSource("csv");
+        }
+        setSummary(trainingSummary);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSource("mock");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>AI Candidate Ranking</h1>
-          <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>Automatically ranked by AI based on skills, experience, and resume match.</p>
+          <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>
+            {source === "csv"
+              ? "Ranked from uploaded CV, job, application, and ATS training datasets."
+              : "Showing local sample rankings until the AI backend is available."}
+          </p>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "#e8f0fe" }}>
           <Bot size={18} style={{ color: "#0071e3" }} />
-          <span className="text-xs font-medium" style={{ color: "#0071e3" }}>AI Powered</span>
+          <span className="text-xs font-medium" style={{ color: "#0071e3" }}>{loading ? "Loading AI" : source === "csv" ? "CSV Trained" : "Sample AI"}</span>
         </div>
       </div>
 
@@ -404,10 +456,10 @@ function AIRanking() {
         <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Ranking Logic</h3>
         <div className="grid md:grid-cols-4 gap-4">
           {[
-            { label: "Skills Match", weight: "40%", desc: "Keyword and semantic matching", color: "#0071e3" },
-            { label: "Experience", weight: "25%", desc: "Relevant years and projects", color: "#3dc75a" },
-            { label: "Education", weight: "20%", desc: "Degree and certifications", color: "#f5a623" },
-            { label: "Resume Quality", weight: "15%", desc: "Formatting and completeness", color: "#9b59b6" },
+            { label: "Skills Match", weight: `${summary?.weights.skillsMatch ?? 40}%`, desc: "Keyword and semantic matching", color: "#0071e3" },
+            { label: "Experience", weight: `${summary?.weights.experience ?? 25}%`, desc: "Relevant years and projects", color: "#3dc75a" },
+            { label: "Education", weight: `${summary?.weights.education ?? 20}%`, desc: "Degree and certifications", color: "#f5a623" },
+            { label: "Resume Quality", weight: `${summary?.weights.resumeQuality ?? 15}%`, desc: "Formatting and completeness", color: "#9b59b6" },
           ].map((w) => (
             <div key={w.label} className="p-4 rounded-lg" style={{ background: `${w.color}10` }}>
               <p className="text-lg font-bold" style={{ color: w.color }}>{w.weight}</p>
@@ -416,6 +468,11 @@ function AIRanking() {
             </div>
           ))}
         </div>
+        {summary && (
+          <p className="text-xs mt-4" style={{ color: "#6c6c6c" }}>
+            Training sample: {summary.rows.toLocaleString()} rows, {summary.shortlistedRate}% shortlisted rate, {summary.averageSkillsMatch}% average skills match.
+          </p>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -428,6 +485,17 @@ function AIRanking() {
             <div className="flex-1">
               <h4 className="text-sm font-semibold" style={{ color: "#0a0a0c" }}>{app.candidateName}</h4>
               <p className="text-xs" style={{ color: "#6c6c6c" }}>{app.jobTitle} at {app.company}</p>
+              <p className="text-xs mt-1" style={{ color: "#6c6c6c" }}>
+                {[app.experience, app.education, app.location].filter(Boolean).join(" | ")}
+              </p>
+              {app.skills.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {app.skills.map((skill) => (
+                    <span key={skill} className="px-2 py-0.5 rounded text-xs" style={{ background: "#f4f4f4", color: "#6c6c6c" }}>{skill}</span>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs mt-2" style={{ color: "#6c6c6c" }}>{app.reasons[0]}</p>
             </div>
             <div className="text-center mr-4">
               <div className="w-16 h-16 rounded-full flex items-center justify-center relative"

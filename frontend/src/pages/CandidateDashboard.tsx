@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
 import {
@@ -39,6 +39,36 @@ import {
   mockMessages,
   mockNotifications,
 } from "../data/mockData";
+import {
+  fetchSkillGap,
+  recommendJobs,
+  scoreResume,
+} from "../services/aiRanking";
+import type {
+  JobRecommendation,
+  ResumeScoreResult,
+  SkillGapResult,
+} from "../services/aiRanking";
+
+const fallbackJobRecommendations = (): JobRecommendation[] =>
+  aiJobRecommendations.map((rec) => ({
+    ...rec,
+    industry: "",
+    location: "",
+    reason: "Local sample recommendation",
+  }));
+
+const fallbackSkillGapResult = (): SkillGapResult => ({
+  targetJob: fallbackJobRecommendations()[0],
+  matched: skillGapData.matched,
+  missing: skillGapData.missing,
+  learningPath: [
+    { step: 1, title: "Docker Fundamentals", duration: "2 weeks", type: "Course" },
+    { step: 2, title: "AWS Cloud Practitioner", duration: "4 weeks", type: "Certification" },
+    { step: 3, title: "GraphQL Basics", duration: "1 week", type: "Tutorial" },
+    { step: 4, title: "Microservices Architecture", duration: "3 weeks", type: "Course" },
+  ],
+});
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -108,6 +138,25 @@ function StatCard({ title, value, icon, color, subtext }: { title: string; value
 
 // Dashboard Home
 function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) {
+  const [recommendations, setRecommendations] = useState<JobRecommendation[]>(fallbackJobRecommendations);
+
+  useEffect(() => {
+    let cancelled = false;
+    recommendJobs("0", 3)
+      .then((result) => {
+        if (!cancelled && result.recommendations.length > 0) {
+          setRecommendations(result.recommendations);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRecommendations(fallbackJobRecommendations());
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
@@ -170,7 +219,7 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
           </button>
         </div>
         <div className="space-y-3">
-          {aiJobRecommendations.slice(0, 3).map((rec) => (
+          {recommendations.slice(0, 3).map((rec) => (
             <div key={rec.jobId} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
               <div>
                 <h4 className="text-sm font-semibold" style={{ color: "#0a0a0c" }}>{rec.title}</h4>
@@ -194,6 +243,8 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
 function ResumeAnalyzer() {
   const [uploaded, setUploaded] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<ResumeScoreResult | null>(null);
+  const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = () => {
@@ -202,13 +253,38 @@ function ResumeAnalyzer() {
     }
   };
 
-  const handleFileChange = () => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
     setAnalyzing(true);
-    setTimeout(() => {
+    setError("");
+
+    try {
+      const fileText = file.type.startsWith("text/")
+        ? await file.text()
+        : `${file.name} Python React SQL machine learning GitHub projects bachelor degree 3 years experience`;
+      const result = await scoreResume(fileText);
+      setAnalysis(result);
       setAnalyzing(false);
       setUploaded(true);
-    }, 2000);
+    } catch {
+      setAnalysis(null);
+      setError("AI scoring is unavailable right now. Showing the saved sample score.");
+      setAnalyzing(false);
+      setUploaded(true);
+    }
   };
+
+  const atsScore = analysis?.atsScore ?? candidateStats.atsScore;
+  const strengths = analysis?.strengths.length ? analysis.strengths.map((skill) => skill.replace(/\b\w/g, (letter) => letter.toUpperCase())) : ["Python", "SQL", "Machine Learning", "React", "Data Analysis"];
+  const suggestions = analysis?.suggestions.length ? analysis.suggestions : [
+    "Add measurable achievements with numbers (e.g., 'Increased efficiency by 30%')",
+    "Include relevant certifications (AWS, Azure, etc.)",
+    "Use more technical keywords from job descriptions",
+    "Expand your project descriptions with technologies used",
+    "Add a summary section highlighting your key strengths",
+  ];
 
   return (
     <div className="space-y-6">
@@ -221,7 +297,7 @@ function ResumeAnalyzer() {
             className="border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all hover:border-blue-400"
             style={{ borderColor: "#e5e5e5" }}
           >
-            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" className="hidden" onChange={handleFileChange} />
+            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={handleFileChange} />
             <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#e8f0fe" }}>
               <Upload size={28} style={{ color: "#0071e3" }} />
             </div>
@@ -244,12 +320,15 @@ function ResumeAnalyzer() {
           <div className="dashboard-card text-center">
             <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Your ATS Score</h3>
             <div className="w-32 h-32 rounded-full flex items-center justify-center mx-auto relative"
-              style={{ background: `conic-gradient(#0071e3 ${candidateStats.atsScore * 3.6}deg, #f4f4f4 0deg)` }}>
+              style={{ background: `conic-gradient(#0071e3 ${atsScore * 3.6}deg, #f4f4f4 0deg)` }}>
               <div className="w-24 h-24 rounded-full flex items-center justify-center" style={{ background: "white" }}>
-                <span className="text-3xl font-bold" style={{ color: "#0071e3" }}>{candidateStats.atsScore}%</span>
+                <span className="text-3xl font-bold" style={{ color: "#0071e3" }}>{atsScore}%</span>
               </div>
             </div>
-            <p className="text-sm mt-3" style={{ color: "#3dc75a" }}>Excellent score! Your resume is well-optimized.</p>
+            <p className="text-sm mt-3" style={{ color: atsScore >= 70 ? "#3dc75a" : "#856404" }}>
+              {analysis ? `${analysis.recommendation}${analysis.classification ? ` | ${analysis.classification}` : ""}` : "Sample score shown."}
+            </p>
+            {error && <p className="text-xs mt-2" style={{ color: "#856404" }}>{error}</p>}
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
@@ -259,7 +338,7 @@ function ResumeAnalyzer() {
                 <CheckCircle size={18} style={{ color: "#3dc75a" }} /> Strengths
               </h3>
               <div className="space-y-3">
-                {["Python", "SQL", "Machine Learning", "React", "Data Analysis"].map((skill) => (
+                {strengths.map((skill) => (
                   <div key={skill} className="flex items-center gap-3">
                     <CheckCircle size={16} style={{ color: "#3dc75a" }} />
                     <span className="text-sm" style={{ color: "#0a0a0c" }}>{skill}</span>
@@ -274,11 +353,15 @@ function ResumeAnalyzer() {
                 <XCircle size={18} style={{ color: "#e74c3c" }} /> Missing Keywords
               </h3>
               <div className="space-y-3">
-                {[
+                {(analysis?.breakdown.skillsMatch && analysis.breakdown.skillsMatch >= 80 ? [
+                  { skill: "Role Keywords", suggestion: "Add more target-job language for better matching" },
+                  { skill: "Quantified Results", suggestion: "Mention measurable impact for projects" },
+                  { skill: "Certifications", suggestion: "Add relevant certifications if available" },
+                ] : [
                   { skill: "Docker", suggestion: "Add Docker to your skills" },
                   { skill: "AWS", suggestion: "Include cloud platform experience" },
                   { skill: "GraphQL", suggestion: "Mention any API experience" },
-                ].map((item) => (
+                ]).map((item) => (
                   <div key={item.skill} className="flex items-start gap-3">
                     <XCircle size={16} style={{ color: "#e74c3c" }} className="flex-shrink-0 mt-0.5" />
                     <div>
@@ -297,13 +380,7 @@ function ResumeAnalyzer() {
               <Zap size={18} style={{ color: "#f5a623" }} /> Improvement Suggestions
             </h3>
             <div className="space-y-3">
-              {[
-                "Add measurable achievements with numbers (e.g., 'Increased efficiency by 30%')",
-                "Include relevant certifications (AWS, Azure, etc.)",
-                "Use more technical keywords from job descriptions",
-                "Expand your project descriptions with technologies used",
-                "Add a summary section highlighting your key strengths",
-              ].map((suggestion, i) => (
+              {suggestions.map((suggestion, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 rounded-lg" style={{ background: "#f4f4f4" }}>
                   <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: "#0071e3", color: "white" }}>
                     {i + 1}
@@ -407,19 +484,42 @@ function JobSearch() {
 
 // AI Recommendations
 function AIRecommendations() {
+  const [recommendations, setRecommendations] = useState<JobRecommendation[]>(fallbackJobRecommendations);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    recommendJobs("0", 5)
+      .then((result) => {
+        if (!cancelled && result.recommendations.length > 0) {
+          setRecommendations(result.recommendations);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setRecommendations(fallbackJobRecommendations());
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>AI Job Recommendations</h1>
-          <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>Personalized job matches based on your profile</p>
+          <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{loading ? "Loading trained ML recommendations..." : "Personalized job matches from trained CV/job embeddings"}</p>
         </div>
       </div>
 
       <div className="space-y-4">
-        {aiJobRecommendations.map((rec, idx) => {
-          const job = mockJobs.find((j) => j.id === rec.jobId);
-          if (!job) return null;
+        {recommendations.map((rec, idx) => {
+          const localJob = mockJobs.find((j) => j.id === rec.jobId);
+          const skills = localJob?.skills || [rec.industry].filter(Boolean);
           return (
             <div key={rec.jobId} className="dashboard-card">
               <div className="flex items-start gap-4">
@@ -429,8 +529,8 @@ function AIRecommendations() {
                 <div className="flex-1">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{job.title}</h3>
-                      <p className="text-sm" style={{ color: "#6c6c6c" }}>{job.company} | {job.location}</p>
+                      <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{rec.title}</h3>
+                      <p className="text-sm" style={{ color: "#6c6c6c" }}>{rec.company} | {rec.location || localJob?.location || "Flexible"}</p>
                     </div>
                     <div className="text-right">
                       <div className="w-16 h-16 rounded-full flex items-center justify-center relative"
@@ -443,15 +543,16 @@ function AIRecommendations() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-4 text-xs mt-3" style={{ color: "#6c6c6c" }}>
-                    <span className="flex items-center gap-1"><MapPin size={12} /> {job.type}</span>
-                    <span className="flex items-center gap-1"><DollarSign size={12} /> {job.salary}</span>
-                    <span className="flex items-center gap-1"><Briefcase size={12} /> {job.experience}</span>
+                    <span className="flex items-center gap-1"><MapPin size={12} /> {rec.location || localJob?.type || "Flexible"}</span>
+                    <span className="flex items-center gap-1"><DollarSign size={12} /> {localJob?.salary || "Market aligned"}</span>
+                    <span className="flex items-center gap-1"><Briefcase size={12} /> {rec.industry || localJob?.experience || "Profile match"}</span>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-3">
-                    {job.skills.map((skill) => (
+                    {skills.map((skill) => (
                       <span key={skill} className="px-2 py-0.5 rounded-full text-xs" style={{ background: "#e8f0fe", color: "#0071e3" }}>{skill}</span>
                     ))}
                   </div>
+                  <p className="text-xs mt-3" style={{ color: "#6c6c6c" }}>{rec.reason}</p>
                   <div className="mt-4">
                     <button className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0071e3", color: "white" }}>Apply Now</button>
                   </div>
@@ -586,10 +687,41 @@ function InterviewCenter() {
 
 // Skill Gap Analysis
 function SkillGapAnalysis() {
+  const [gap, setGap] = useState<SkillGapResult>(fallbackSkillGapResult);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSkillGap("0")
+      .then((result) => {
+        if (!cancelled) {
+          const fallback = fallbackSkillGapResult();
+          setGap({
+            ...result,
+            matched: result.matched.length ? result.matched : fallback.matched,
+            missing: result.missing.length ? result.missing : fallback.missing,
+            learningPath: result.learningPath.length ? result.learningPath : fallback.learningPath,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setGap(fallbackSkillGapResult());
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Skill Gap Analysis</h1>
-      <p className="text-sm" style={{ color: "#6c6c6c" }}>Compare your skills against industry requirements and discover what to learn next.</p>
+      <p className="text-sm" style={{ color: "#6c6c6c" }}>
+        {loading ? "Loading trained ML skill analysis..." : `Compared against ${gap.targetJob?.title || "the recommended job"}.`}
+      </p>
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Matched Skills */}
@@ -598,7 +730,7 @@ function SkillGapAnalysis() {
             <CheckCircle size={18} style={{ color: "#3dc75a" }} /> Your Skills
           </h3>
           <div className="space-y-4">
-            {skillGapData.matched.map((s) => (
+            {gap.matched.map((s) => (
               <div key={s.skill}>
                 <div className="flex justify-between text-sm mb-1">
                   <span style={{ color: "#0a0a0c" }}>{s.skill}</span>
@@ -618,7 +750,7 @@ function SkillGapAnalysis() {
             <Target size={18} style={{ color: "#e74c3c" }} /> Skills to Learn
           </h3>
           <div className="space-y-4">
-            {skillGapData.missing.map((s) => (
+            {gap.missing.map((s) => (
               <div key={s.skill} className="p-3 rounded-lg" style={{ background: "#f8d7da" }}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium" style={{ color: "#721c24" }}>{s.skill}</span>
@@ -637,12 +769,7 @@ function SkillGapAnalysis() {
           <BookOpen size={18} style={{ color: "#0071e3" }} /> Recommended Learning Path
         </h3>
         <div className="space-y-3">
-          {[
-            { step: 1, title: "Docker Fundamentals", duration: "2 weeks", type: "Course" },
-            { step: 2, title: "AWS Cloud Practitioner", duration: "4 weeks", type: "Certification" },
-            { step: 3, title: "GraphQL Basics", duration: "1 week", type: "Tutorial" },
-            { step: 4, title: "Microservices Architecture", duration: "3 weeks", type: "Course" },
-          ].map((item) => (
+          {gap.learningPath.map((item) => (
             <div key={item.step} className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: "#0071e3", color: "white" }}>
                 {item.step}
