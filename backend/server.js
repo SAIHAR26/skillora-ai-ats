@@ -3,7 +3,14 @@ const cors = require("cors");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
+
+// Routes
 const aiRoutes = require("./routes/aiRoutes");
+const authRoutes = require("./routes/authRoutes");
+const candidateRoutes = require("./routes/candidateRoutes");
+const recruiterRoutes = require("./routes/recruiterRoutes");
+const userRoutes = require("./routes/userRoutes");
+const jobRoutes = require("./routes/jobRoutes");
 
 // Load all models
 require("./models/User");
@@ -43,6 +50,11 @@ app.get("/api/health", (_req, res) => {
 
 // AI Routes
 app.use("/api/ai", aiRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/candidates", candidateRoutes);
+app.use("/api/recruit", recruiterRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/jobs", jobRoutes);
 
 // Main Routes
 app.use("/api/auth", require("./routes/auth"));
@@ -60,6 +72,7 @@ app.use("/api/opportunities", require("./routes/opportunities"));
 app.use(notFound);
 app.use(errorHandler);
 
+// Start server
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
