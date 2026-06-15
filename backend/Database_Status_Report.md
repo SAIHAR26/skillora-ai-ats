@@ -59,19 +59,6 @@ Verified:
 - Password Hash Storage
 - Role-Based Authentication
 
-## Sample Records Verification
-
-### Candidate Record
-- Name: Lasya
-- Email: lasyapaladugula@gmail.com
-- Role: Candidate
-- Status: Active
-
-### Recruiter Record
-- Name: John Smith
-- Email: john@techcorp.com
-- Role: Recruiter
-- Status: Pending
 
 ## Database Operations
 
