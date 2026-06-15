@@ -12,11 +12,20 @@ const recruiterRoutes = require("./routes/recruiterRoutes");
 const userRoutes = require("./routes/userRoutes");
 const jobRoutes = require("./routes/jobRoutes");
 
-// Models
+// Load all models
 require("./models/User");
 require("./models/Recruiter");
 require("./models/Candidate");
+require("./models/Admin");
 require("./models/Job");
+require("./models/Application");
+require("./models/Resume");
+require("./models/Interview");
+require("./models/Notification");
+require("./models/Complaint");
+require("./models/Opportunity");
+
+const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
 const app = express();
 
@@ -24,23 +33,22 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-// DB connection
+// Database Connection
 connectDB();
 
-// Health check
-app.get("/", (req, res) => {
+// Test Routes
+app.get("/", (_req, res) => {
   res.send("Skillora backend running successfully");
 });
 
-app.get("/api/health", (req, res) => {
+app.get("/api/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "skillora-backend",
-    timestamp: new Date(),
   });
 });
 
-// Routes
+// AI Routes
 app.use("/api/ai", aiRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/candidates", candidateRoutes);
@@ -48,21 +56,21 @@ app.use("/api/recruit", recruiterRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/jobs", jobRoutes);
 
-// 404
-app.use((req, res) => {
-  res.status(404).json({
-    message: `Route not found: ${req.method} ${req.originalUrl}`,
-  });
-});
+// Main Routes
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/users", require("./routes/users"));
+app.use("/api/recruiters", require("./routes/recruiters"));
+app.use("/api/candidates", require("./routes/candidates"));
+app.use("/api/jobs", require("./routes/jobs"));
+app.use("/api/applications", require("./routes/applications"));
+app.use("/api/interviews", require("./routes/interviews"));
+app.use("/api/notifications", require("./routes/notifications"));
+app.use("/api/complaints", require("./routes/complaints"));
+app.use("/api/opportunities", require("./routes/opportunities"));
 
-// Error handler
-app.use((error, req, res, next) => {
-  console.error("Server Error:", error);
-
-  res.status(500).json({
-    message: error.message || "Internal server error",
-  });
-});
+// Error Handling Middleware (MUST BE LAST)
+app.use(notFound);
+app.use(errorHandler);
 
 // Start server
 const PORT = process.env.PORT || 5000;
