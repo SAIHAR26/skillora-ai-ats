@@ -5,36 +5,46 @@ require("dotenv").config();
 const connectDB = require("./config/db");
 const aiRoutes = require("./routes/aiRoutes");
 
+// Load all models
 require("./models/User");
 require("./models/Recruiter");
 require("./models/Candidate");
+require("./models/Admin");
+require("./models/Job");
+require("./models/Application");
+require("./models/Resume");
+require("./models/Interview");
+require("./models/Notification");
+require("./models/Complaint");
+require("./models/Opportunity");
+
+const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
+// Database Connection
 connectDB();
 
+// Test Routes
 app.get("/", (_req, res) => {
   res.send("Skillora backend running successfully");
 });
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", service: "skillora-backend" });
+  res.json({
+    status: "ok",
+    service: "skillora-backend",
+  });
 });
 
+// AI Routes
 app.use("/api/ai", aiRoutes);
 
-app.use((req, res) => {
-  res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
-});
-
-app.use((error, _req, res, _next) => {
-  console.error(error);
-  res.status(500).json({ message: error.message || "Internal server error" });
-});
-
+// Main Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api/recruiters", require("./routes/recruiters"));
@@ -46,7 +56,7 @@ app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/complaints", require("./routes/complaints"));
 app.use("/api/opportunities", require("./routes/opportunities"));
 
-const { notFound, errorHandler } = require("./middleware/errorMiddleware");
+// Error Handling Middleware (MUST BE LAST)
 app.use(notFound);
 app.use(errorHandler);
 
