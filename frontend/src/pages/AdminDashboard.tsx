@@ -38,6 +38,7 @@ import {
   mockApplications,
 } from "../data/mockData";
 import type { Recruiter, Candidate, Complaint } from "../data/mockData";
+import { apiRequest } from "../services/platformApi";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -310,11 +311,27 @@ function UserManagement() {
 function RecruiterVerification() {
   const [recruiters, setRecruiters] = useState<Recruiter[]>(mockRecruiters.filter((r) => r.status === "pending"));
 
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
+    try {
+      await apiRequest(`/recruiters/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "approved" }),
+      });
+    } catch {
+      // Keep local workflow responsive if the backend is unreachable.
+    }
     setRecruiters(recruiters.filter((r) => r.id !== id));
   };
 
-  const handleReject = (id: string) => {
+  const handleReject = async (id: string) => {
+    try {
+      await apiRequest(`/recruiters/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "rejected" }),
+      });
+    } catch {
+      // Keep local workflow responsive if the backend is unreachable.
+    }
     setRecruiters(recruiters.filter((r) => r.id !== id));
   };
 
@@ -717,9 +734,18 @@ function NotificationCenter() {
   ]);
   const [newNotif, setNewNotif] = useState({ title: "", message: "", recipients: "all" });
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    setNotifs([{ id: `${notifs.length + 1}`, ...newNotif, type: "announcement" }, ...notifs]);
+    const notification = { id: `${notifs.length + 1}`, userId: newNotif.recipients, ...newNotif, type: "announcement", timestamp: new Date().toISOString(), read: false };
+    try {
+      await apiRequest("/platform/notifications", {
+        method: "POST",
+        body: JSON.stringify(notification),
+      });
+    } catch {
+      // Keep announcement visible locally if the backend is unavailable.
+    }
+    setNotifs([notification, ...notifs]);
     setNewNotif({ title: "", message: "", recipients: "all" });
   };
 

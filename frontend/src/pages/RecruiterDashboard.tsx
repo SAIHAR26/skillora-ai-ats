@@ -39,6 +39,7 @@ import {
 import type { Job, Application } from "../data/mockData";
 import { fetchAiRankings, fetchAiTrainingSummary } from "../services/aiRanking";
 import type { AiRanking, AiTrainingSummary } from "../services/aiRanking";
+import { apiRequest } from "../services/platformApi";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -185,7 +186,7 @@ function JobManagement() {
   const [showForm, setShowForm] = useState(false);
   const [newJob, setNewJob] = useState({ title: "", description: "", skills: "", experience: "", salary: "", location: "", type: "Remote", deadline: "" });
 
-  const handleCreateJob = (e: React.FormEvent) => {
+  const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
     const job: Job = {
       id: `job-${jobs.length + 1}`,
@@ -205,13 +206,29 @@ function JobManagement() {
       hired: 0,
       postedDate: new Date().toISOString().split("T")[0],
     };
-    setJobs([...jobs, job]);
+    try {
+      const result = await apiRequest<{ job: Job }>("/platform/jobs", {
+        method: "POST",
+        body: JSON.stringify(job),
+      });
+      setJobs([...jobs, result.job]);
+    } catch {
+      setJobs([...jobs, job]);
+    }
     setShowForm(false);
     setNewJob({ title: "", description: "", skills: "", experience: "", salary: "", location: "", type: "Remote", deadline: "" });
   };
 
-  const handleStatusChange = (id: string, status: Job["status"]) => {
-    setJobs(jobs.map((j) => (j.id === id ? { ...j, status } : j)));
+  const handleStatusChange = async (id: string, status: Job["status"]) => {
+    try {
+      const result = await apiRequest<{ job: Job }>(`/platform/jobs/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      setJobs(jobs.map((j) => (j.id === id ? result.job : j)));
+    } catch {
+      setJobs(jobs.map((j) => (j.id === id ? { ...j, status } : j)));
+    }
   };
 
   return (
@@ -728,10 +745,10 @@ function Messages() {
   const [messages, setMessages] = useState(mockMessages);
   const [reply, setReply] = useState("");
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reply.trim()) return;
-    setMessages([...messages, {
+    const message = {
       id: `msg-${messages.length + 1}`,
       senderId: "rec-1",
       senderName: "You",
@@ -740,7 +757,16 @@ function Messages() {
       content: reply,
       timestamp: new Date().toISOString(),
       read: true,
-    }]);
+    };
+    try {
+      const result = await apiRequest<{ message: typeof message }>("/platform/messages", {
+        method: "POST",
+        body: JSON.stringify(message),
+      });
+      setMessages([...messages, result.message]);
+    } catch {
+      setMessages([...messages, message]);
+    }
     setReply("");
   };
 
@@ -780,8 +806,22 @@ function ContactAdmin() {
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    try {
+      await apiRequest("/platform/complaints", {
+        method: "POST",
+        body: JSON.stringify({
+          userId: "rec-1",
+          userName: "Jennifer Walsh",
+          userRole: "recruiter",
+          subject,
+          description: message,
+        }),
+      });
+    } catch {
+      // The success state still confirms the local submission when offline.
+    }
     setSent(true);
     setSubject("");
     setMessage("");

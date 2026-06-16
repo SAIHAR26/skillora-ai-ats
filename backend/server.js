@@ -4,10 +4,21 @@ require("dotenv").config();
 
 const connectDB = require("./config/db");
 const aiRoutes = require("./routes/aiRoutes");
+const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
+const recruiterRoutes = require("./routes/recruiterRoutes");
+const candidateRoutes = require("./routes/candidateRoutes");
+const platformRoutes = require("./routes/platformRoutes");
 
 require("./models/User");
 require("./models/Recruiter");
 require("./models/Candidate");
+require("./models/Job");
+require("./models/Application");
+require("./models/Interview");
+require("./models/Message");
+require("./models/Notification");
+require("./models/Complaint");
 
 const app = express();
 
@@ -25,6 +36,11 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/ai", aiRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/recruiters", recruiterRoutes);
+app.use("/api/candidates", candidateRoutes);
+app.use("/api/platform", platformRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });

@@ -9,6 +9,13 @@ const UserSchema = new mongoose.Schema({
     enum: ["admin", "recruiter", "candidate"],
     default: "candidate",
   },
+  status: {
+    type: String,
+    enum: ["active", "pending", "approved", "rejected", "suspended"],
+    default: "active",
+  },
 }, { timestamps: true });
+
+UserSchema.index({ role: 1, status: 1 });
 
 module.exports = mongoose.model("User", UserSchema);

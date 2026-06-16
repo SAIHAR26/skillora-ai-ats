@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../App";
+import { registerUser } from "../services/platformApi";
 import {
   Eye,
   EyeOff,
@@ -64,6 +65,7 @@ export default function SignupPage() {
   });
 
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleCandidateChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -77,7 +79,7 @@ export default function SignupPage() {
     setRecForm({ ...recForm, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -86,10 +88,20 @@ export default function SignupPage() {
       return;
     }
 
-    // Mock signup
-    login(role);
-    if (role === "recruiter") navigate("/recruiter");
-    else navigate("/candidate");
+    setLoading(true);
+    try {
+      const payload = role === "candidate"
+        ? { ...candForm, role }
+        : { ...recForm, role, email: recForm.personalEmail, companyRole: recForm.role };
+      const result = await registerUser(payload);
+      login(result.user.role, result.token, result.user);
+      if (result.user.role === "recruiter") navigate("/recruiter");
+      else navigate("/candidate");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Signup failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const roles: {
@@ -270,9 +282,10 @@ export default function SignupPage() {
             Back
           </button>
           <button type="submit"
+            disabled={loading}
             className="flex-1 py-3 text-sm font-semibold rounded-xl transition-all hover:opacity-90"
             style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
-            Create Account
+            {loading ? "Creating..." : "Create Account"}
           </button>
         </div>
       </>
@@ -443,9 +456,10 @@ export default function SignupPage() {
             Back
           </button>
           <button type="submit"
+            disabled={loading}
             className="flex-1 py-3 text-sm font-semibold rounded-xl transition-all hover:opacity-90"
             style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
-            Submit for Review
+            {loading ? "Submitting..." : "Submit for Review"}
           </button>
         </div>
       </>
