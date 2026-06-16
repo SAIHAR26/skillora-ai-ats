@@ -1,26 +1,22 @@
 const express = require("express");
+const {
+  getRecruiter,
+  getRecruiterApplications,
+  getRecruiterJobs,
+  listRecruiters,
+  updateRecruiter,
+  updateRecruiterStatus,
+} = require("../controllers/recruiterController");
+const { requireAuth, requireRole } = require("../middleware/authMiddleware");
+
 const router = express.Router();
 
-const {
-  signup,
-  login,
-  getProfile,
-  updateProfile
-} = require("../controllers/recruiterController");
-
-// AUTH
-router.post("/signup", signup);
-router.post("/login", login);
-
-// PROFILE
-router.get("/profile/:id", getProfile);
-router.put("/profile/:id", updateProfile);
-
-// TEST ROUTE (IMPORTANT)
-router.get("/", (req, res) => {
-  res.json({
-    message: "Recruiter routes working"
-  });
-});
+router.get("/", requireAuth, listRecruiters);
+router.get("/:id", requireAuth, getRecruiter);
+router.patch("/:id", requireAuth, updateRecruiter);
+router.put("/:id", requireAuth, updateRecruiter);
+router.patch("/:id/status", requireAuth, requireRole("admin"), updateRecruiterStatus);
+router.get("/:id/jobs", requireAuth, getRecruiterJobs);
+router.get("/:id/applications", requireAuth, getRecruiterApplications);
 
 module.exports = router;

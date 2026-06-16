@@ -1,4 +1,4 @@
-// Mock Data for Skillora Platform
+// Backend-hydrated fallback data for the Skillora platform.
 
 export interface Job {
   id: string;
@@ -684,3 +684,42 @@ export const aiJobRecommendations = [
   { jobId: "job-2", title: "Data Scientist", company: "DataFlow Inc", matchScore: 91 },
   { jobId: "job-6", title: "Mobile Developer", company: "AppNova", matchScore: 89 },
 ];
+
+export interface PlatformSnapshot {
+  adminStats: typeof adminStats;
+  analytics: AnalyticsData[];
+  applications: Application[];
+  candidates: Candidate[];
+  candidateStats: typeof candidateStats;
+  complaints: Complaint[];
+  interviews: Interview[];
+  jobs: Job[];
+  messages: Message[];
+  notifications: Notification[];
+  recruiters: Recruiter[];
+  recruiterStats: typeof recruiterStats;
+  topCandidates: typeof topCandidates;
+  topRecruiters: typeof topRecruiters;
+}
+
+function replaceArray<T>(target: T[], source?: T[]) {
+  if (!source) return;
+  target.splice(0, target.length, ...source);
+}
+
+export function applyPlatformSnapshot(snapshot: PlatformSnapshot) {
+  replaceArray(mockJobs, snapshot.jobs);
+  replaceArray(mockCandidates, snapshot.candidates);
+  replaceArray(mockRecruiters, snapshot.recruiters);
+  replaceArray(mockInterviews, snapshot.interviews);
+  replaceArray(mockApplications, snapshot.applications);
+  replaceArray(mockMessages, snapshot.messages);
+  replaceArray(mockNotifications, snapshot.notifications);
+  replaceArray(mockComplaints, snapshot.complaints);
+  replaceArray(mockAnalytics, snapshot.analytics);
+  replaceArray(topRecruiters, snapshot.topRecruiters);
+  replaceArray(topCandidates, snapshot.topCandidates);
+  Object.assign(adminStats, snapshot.adminStats);
+  Object.assign(recruiterStats, snapshot.recruiterStats);
+  Object.assign(candidateStats, snapshot.candidateStats);
+}

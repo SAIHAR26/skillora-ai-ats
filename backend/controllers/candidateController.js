@@ -1,25 +1,55 @@
+const mongoose = require("mongoose");
 const Candidate = require("../models/Candidate");
 const Resume = require("../models/Resume");
 const Application = require("../models/Application");
+const { toClient } = require("../services/platformDataService");
 
-exports.getCandidate = async (req, res) => {
-  const candidate = await Candidate.findById(req.params.id).populate("userId", "name email role status");
+const asyncHandler = (handler) => async (req, res, next) => {
+  try {
+    await handler(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const candidateFilter = (id) => (mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { id });
+
+const listCandidates = asyncHandler(async (req, res) => {
+  const query = req.query.search ? { $text: { $search: req.query.search } } : {};
+  const candidates = await Candidate.find(query).limit(100).lean();
+  return res.json({ candidates: candidates.map(toClient) });
+});
+
+const getCandidate = asyncHandler(async (req, res) => {
+  const candidate = await Candidate.findOne(candidateFilter(req.params.id)).populate("userId", "name email role status");
   if (!candidate) {
     return res.status(404).json({ message: "Candidate not found" });
   }
-  res.json(candidate);
-};
+  return res.json(candidate);
+});
 
-exports.updateCandidate = async (req, res) => {
-  const candidate = await Candidate.findById(req.params.id);
+const updateCandidate = asyncHandler(async (req, res) => {
+  const candidate = await Candidate.findOne(candidateFilter(req.params.id));
   if (!candidate) {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
   const updateFields = [
+    "name",
+    "email",
+    "phone",
+    "phoneNumber",
     "headline",
     "summary",
+    "college",
+    "degree",
+    "specialization",
+    "graduationYear",
+    "cgpa",
+    "currentLocation",
     "location",
+    "preferredLocation",
+    "experienceLevel",
     "experienceYears",
     "skills",
     "education",
@@ -28,6 +58,11 @@ exports.updateCandidate = async (req, res) => {
     "certifications",
     "preferredJobTypes",
     "preferredLocations",
+    "workPreference",
+    "linkedin",
+    "github",
+    "resumeUrl",
+    "status",
   ];
 
   updateFields.forEach((field) => {
@@ -37,11 +72,11 @@ exports.updateCandidate = async (req, res) => {
   });
 
   await candidate.save();
-  res.json({ message: "Candidate profile updated", candidate });
-};
+  return res.json({ message: "Candidate profile updated", candidate: toClient(candidate) });
+});
 
-exports.addResume = async (req, res) => {
-  const candidate = await Candidate.findById(req.params.id);
+const addResume = asyncHandler(async (req, res) => {
+  const candidate = await Candidate.findOne(candidateFilter(req.params.id));
   if (!candidate) {
     return res.status(404).json({ message: "Candidate not found" });
   }
@@ -63,27 +98,39 @@ exports.addResume = async (req, res) => {
   });
 
   candidate.resumeIds.push(resume._id);
+  candidate.resumeUrl = storageUrl;
   await candidate.save();
 
-  res.status(201).json({ message: "Resume metadata saved", resume });
-};
+  return res.status(201).json({ message: "Resume metadata saved", resume });
+});
 
-exports.getCandidateResumes = async (req, res) => {
-  const candidate = await Candidate.findById(req.params.id);
+const getCandidateResumes = asyncHandler(async (req, res) => {
+  const candidate = await Candidate.findOne(candidateFilter(req.params.id));
   if (!candidate) {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
   const resumes = await Resume.find({ candidateId: candidate._id }).sort({ createdAt: -1 });
-  res.json(resumes);
-};
+  return res.json(resumes);
+});
 
-exports.getCandidateApplications = async (req, res) => {
-  const candidate = await Candidate.findById(req.params.id);
+const getCandidateApplications = asyncHandler(async (req, res) => {
+  const candidate = await Candidate.findOne(candidateFilter(req.params.id));
   if (!candidate) {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
-  const applications = await Application.find({ candidateId: candidate._id }).populate("jobId resumeId").sort({ appliedAt: -1 });
-  res.json(applications);
+  const applications = await Application.find({
+    $or: [{ candidateId: candidate._id }, { candidateId: candidate.id }],
+  }).populate("jobId resumeId").sort({ appliedAt: -1 });
+  return res.json(applications);
+});
+
+module.exports = {
+  addResume,
+  getCandidate,
+  getCandidateApplications,
+  getCandidateResumes,
+  listCandidates,
+  updateCandidate,
 };

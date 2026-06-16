@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
+import { loginUser } from "../services/platformApi";
 import { Eye, EyeOff, ArrowLeft, Building2, User, Shield } from "lucide-react";
 
 type LoginRole = "admin" | "recruiter" | "candidate";
@@ -13,19 +14,27 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     if (!email || !password) {
       setError("Please fill in all fields");
       return;
     }
-    // Mock login - in real app would validate credentials
-    login(role);
-    if (role === "admin") navigate("/admin");
-    else if (role === "recruiter") navigate("/recruiter");
-    else navigate("/candidate");
+    setLoading(true);
+    try {
+      const result = await loginUser({ email, password, role });
+      login(result.user.role, result.token, result.user);
+      if (result.user.role === "admin") navigate("/admin");
+      else if (result.user.role === "recruiter") navigate("/recruiter");
+      else navigate("/candidate");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const roles: { key: LoginRole; label: string; icon: React.ReactNode; desc: string }[] = [
@@ -188,10 +197,11 @@ export default function LoginPage() {
 
             <button
               type="submit"
+              disabled={loading}
               className="w-full py-3 text-sm font-semibold rounded-xl transition-all hover:opacity-90"
               style={{ background: "#0a0a0c", color: "#f2f0e6" }}
             >
-              Sign In
+              {loading ? "Signing In..." : "Sign In"}
             </button>
 
             <p className="text-center text-sm" style={{ color: "#6c6c6c" }}>
@@ -206,15 +216,16 @@ export default function LoginPage() {
               </button>
             </p>
 
-            {/* Quick login hint */}
             <div
               className="mt-6 p-4 rounded-xl text-xs"
               style={{ background: "#f4f4f4", color: "#6c6c6c" }}
             >
               <p className="font-semibold mb-2" style={{ color: "#0a0a0c" }}>
-                Demo Login (click Sign In with any credentials):
+                Seeded account examples:
               </p>
-              <p>Any email + password will work for demo purposes.</p>
+              <p>admin@skillora.com / Admin@12345</p>
+              <p>alex.j@email.com / Candidate@12345</p>
+              <p>jennifer@techcorp.com / Recruiter@12345</p>
             </div>
           </form>
         </div>

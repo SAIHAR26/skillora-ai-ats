@@ -49,6 +49,7 @@ import type {
   ResumeScoreResult,
   SkillGapResult,
 } from "../services/aiRanking";
+import { apiRequest } from "../services/platformApi";
 
 const fallbackJobRecommendations = (): JobRecommendation[] =>
   aiJobRecommendations.map((rec) => ({
@@ -400,6 +401,7 @@ function ResumeAnalyzer() {
 function JobSearch() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ location: "", type: "", experience: "" });
+  const [appliedJobIds, setAppliedJobIds] = useState(() => new Set(mockApplications.filter((app) => app.candidateId === "cand-1").map((app) => app.jobId)));
 
   const filtered = mockJobs.filter((job) => {
     const matchSearch = job.title.toLowerCase().includes(search.toLowerCase()) || job.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
@@ -472,8 +474,35 @@ function JobSearch() {
                 <span key={skill} className="px-2 py-0.5 rounded-full text-xs" style={{ background: "#f4f4f4", color: "#6c6c6c" }}>{skill}</span>
               ))}
             </div>
-            <button className="px-6 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80" style={{ background: "#0071e3", color: "white" }}>
-              Apply Now
+            <button
+              disabled={appliedJobIds.has(job.id)}
+              onClick={async () => {
+                const application = {
+                  id: `app-${Date.now()}`,
+                  candidateId: "cand-1",
+                  candidateName: "Alex Johnson",
+                  jobId: job.id,
+                  jobTitle: job.title,
+                  company: job.company,
+                  atsScore: candidateStats.atsScore,
+                  status: "applied",
+                  appliedDate: new Date().toISOString().slice(0, 10),
+                  resumeUrl: "/resumes/alex.pdf",
+                };
+                try {
+                  await apiRequest("/platform/applications", {
+                    method: "POST",
+                    body: JSON.stringify(application),
+                  });
+                } catch {
+                  // Keep the optimistic UI state when offline.
+                }
+                setAppliedJobIds(new Set([...appliedJobIds, job.id]));
+              }}
+              className="px-6 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
+              style={{ background: appliedJobIds.has(job.id) ? "#d4edda" : "#0071e3", color: appliedJobIds.has(job.id) ? "#155724" : "white" }}
+            >
+              {appliedJobIds.has(job.id) ? "Applied" : "Apply Now"}
             </button>
           </div>
         ))}
@@ -792,10 +821,10 @@ function Messages() {
   const [messages, setMessages] = useState(mockMessages);
   const [reply, setReply] = useState("");
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reply.trim()) return;
-    setMessages([...messages, {
+    const message = {
       id: `msg-${messages.length + 1}`,
       senderId: "cand-1",
       senderName: "You",
@@ -804,7 +833,16 @@ function Messages() {
       content: reply,
       timestamp: new Date().toISOString(),
       read: true,
-    }]);
+    };
+    try {
+      const result = await apiRequest<{ message: typeof message }>("/platform/messages", {
+        method: "POST",
+        body: JSON.stringify(message),
+      });
+      setMessages([...messages, result.message]);
+    } catch {
+      setMessages([...messages, message]);
+    }
     setReply("");
   };
 

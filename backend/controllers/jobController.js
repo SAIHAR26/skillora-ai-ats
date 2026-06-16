@@ -16,8 +16,11 @@ exports.listJobs = async (req, res) => {
   res.json(jobs);
 };
 
+exports.getJobs = exports.listJobs;
+
 exports.getJobById = async (req, res) => {
-  const job = await Job.findById(req.params.id);
+  const filter = req.params.id.match(/^[a-f\d]{24}$/i) ? { _id: req.params.id } : { id: req.params.id };
+  const job = await Job.findOne(filter);
   if (!job) {
     return res.status(404).json({ message: "Job not found" });
   }

@@ -1,84 +1,152 @@
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Recruiter = require("../models/Recruiter");
 const Candidate = require("../models/Candidate");
+const { hashPassword, signToken, verifyPassword } = require("../services/authService");
+const { toClient } = require("../services/platformDataService");
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET || "skillora-secret", { expiresIn: "7d" });
+const asyncHandler = (handler) => async (req, res, next) => {
+  try {
+    await handler(req, res, next);
+  } catch (error) {
+    next(error);
+  }
 };
 
-exports.signup = async (req, res) => {
-  const { name, email, password, role } = req.body;
+const publicUser = (user) => {
+  const value = toClient(user);
+  delete value.password;
+  delete value.passwordHash;
+  return value;
+};
 
-  if (!name || !email || !password || !role) {
-    return res.status(400).json({ message: "Name, email, password and role are required" });
+const buildToken = (user) => signToken({ id: String(user._id), role: user.role, email: user.email });
+
+const signup = asyncHandler(async (req, res) => {
+  const { role = "candidate", password } = req.body;
+  const email = (req.body.email || req.body.personalEmail || req.body.companyEmail || "").toLowerCase();
+  const name = req.body.name || req.body.fullName;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: "Name, email, and password are required" });
   }
 
-  const existingUser = await User.findOne({ email: email.toLowerCase() });
+  if (!["candidate", "recruiter"].includes(role)) {
+    return res.status(400).json({ message: "Only candidate and recruiter self-registration is allowed" });
+  }
+
+  const existingUser = await User.findOne({ email });
   if (existingUser) {
-    return res.status(400).json({ message: "Email already registered" });
+    return res.status(409).json({ message: "An account with this email already exists" });
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
   const status = role === "recruiter" ? "pending" : "active";
-
+  const passwordHash = hashPassword(password);
   const user = await User.create({
     name,
-    email: email.toLowerCase(),
+    email,
     passwordHash,
     role,
     status,
     profileCompleted: false,
   });
 
-  if (role === "recruiter") {
-    await Recruiter.create({ userId: user._id, verified: false, verificationStatus: "pending" });
-  }
-
   if (role === "candidate") {
-    await Candidate.create({ userId: user._id, skills: [], preferredJobTypes: [], preferredLocations: [], resumeIds: [] });
+    await Candidate.create({
+      userId: user._id,
+      id: `cand-${String(user._id).slice(-6)}`,
+      name,
+      email,
+      phone: req.body.phone,
+      phoneNumber: req.body.phoneNumber || req.body.phone,
+      college: req.body.college,
+      degree: req.body.degree,
+      specialization: req.body.specialization,
+      graduationYear: req.body.graduationYear,
+      cgpa: Number(req.body.cgpa) || undefined,
+      skills: String(req.body.skills || "").split(",").map((skill) => skill.trim()).filter(Boolean),
+      education: [req.body.degree, req.body.college].filter(Boolean),
+      experienceLevel: req.body.experienceLevel,
+      atsScore: 0,
+      currentLocation: req.body.currentLocation,
+      location: req.body.currentLocation || req.body.location,
+      preferredLocation: req.body.preferredLocation,
+      preferredLocations: req.body.preferredLocation ? [req.body.preferredLocation] : [],
+      workPreference: req.body.workPreference,
+      preferredJobTypes: [],
+      linkedin: req.body.linkedin,
+      github: req.body.github,
+      appliedJobs: [],
+      resumeIds: [],
+      status: "active",
+    });
   }
 
-  return res.status(201).json({ message: "Signup successful", token: generateToken(user._id), user: { id: user._id, name: user.name, email: user.email, role: user.role, status: user.status } });
-};
+  if (role === "recruiter") {
+    await Recruiter.create({
+      userId: user._id,
+      id: `rec-${String(user._id).slice(-6)}`,
+      name,
+      email,
+      companyEmail: req.body.companyEmail,
+      phone: req.body.phone,
+      companyName: req.body.companyName,
+      companyAddress: req.body.companyAddress,
+      companyWebsite: req.body.companyWebsite,
+      industry: req.body.industry,
+      companySize: req.body.companySize,
+      role: req.body.companyRole || req.body.role,
+      roleInCompany: req.body.companyRole,
+      experience: req.body.experience,
+      linkedin: req.body.linkedin,
+      status: "pending",
+      verified: false,
+      verificationStatus: "pending",
+    });
+  }
 
-exports.login = async (req, res) => {
-  const { email, password } = req.body;
+  return res.status(201).json({
+    message: "Signup successful",
+    token: buildToken(user),
+    user: publicUser(user),
+  });
+});
+
+const login = asyncHandler(async (req, res) => {
+  const { email, password, role } = req.body;
 
   if (!email || !password) {
     return res.status(400).json({ message: "Email and password are required" });
   }
 
-  const user = await User.findOne({ email: email.toLowerCase() });
-  if (!user) {
+  const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
+  if (!user || (role && user.role !== role)) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
-  const isMatch = await bcrypt.compare(password, user.passwordHash);
-  if (!isMatch) {
+  const storedPassword = user.passwordHash || user.password;
+  if (!verifyPassword(password, storedPassword)) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
-  if (user.status !== "active") {
+  if (["blocked", "suspended", "rejected"].includes(user.status)) {
     return res.status(403).json({ message: "Account is not active" });
   }
 
   user.lastLoginAt = new Date();
   await user.save();
 
-  return res.json({ token: generateToken(user._id), user: { id: user._id, name: user.name, email: user.email, role: user.role, status: user.status } });
-};
+  return res.json({ token: buildToken(user), user: publicUser(user) });
+});
 
-exports.getMe = async (req, res) => {
+const getMe = asyncHandler(async (req, res) => {
   if (!req.user) {
     return res.status(401).json({ message: "Not authenticated" });
   }
 
-  return res.json(req.user);
-};
+  return res.json({ user: publicUser(req.user) });
+});
 
-exports.updateProfile = async (req, res) => {
+const updateProfile = asyncHandler(async (req, res) => {
   const { name, email } = req.body;
 
   if (!req.user) {
@@ -95,9 +163,18 @@ exports.updateProfile = async (req, res) => {
 
   await user.save();
 
-  return res.json({ message: "Profile updated", user: { id: user._id, name: user.name, email: user.email, role: user.role, status: user.status } });
-};
+  return res.json({ message: "Profile updated", user: publicUser(user) });
+});
 
-exports.logout = async (req, res) => {
+const logout = asyncHandler(async (_req, res) => {
   return res.json({ message: "Logout successful" });
+});
+
+module.exports = {
+  getMe,
+  login,
+  logout,
+  register: signup,
+  signup,
+  updateProfile,
 };
