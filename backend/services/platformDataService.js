@@ -38,21 +38,21 @@ async function seedIfEmpty() {
   if (!isMongoReady()) return { seeded: false, reason: "MongoDB is not connected" };
 
   const users = [
-    { name: "Skillora Admin", email: "admin@skillora.com", password: hashPassword("Admin@12345"), role: "admin", status: "active" },
-    ...seedData.candidates.map((candidate) => ({
+    { name: "Skillora Admin", email: "admin@skillora.com", passwordHash: await hashPassword("Admin@12345"), role: "admin", status: "active" },
+    ...(await Promise.all(seedData.candidates.map(async (candidate) => ({
       name: candidate.name,
       email: candidate.email,
-      password: hashPassword("Candidate@12345"),
+      passwordHash: await hashPassword("Candidate@12345"),
       role: "candidate",
       status: candidate.status,
-    })),
-    ...seedData.recruiters.map((recruiter) => ({
+    })))),
+    ...(await Promise.all(seedData.recruiters.map(async (recruiter) => ({
       name: recruiter.name,
       email: recruiter.email,
-      password: hashPassword("Recruiter@12345"),
+      passwordHash: await hashPassword("Recruiter@12345"),
       role: "recruiter",
       status: recruiter.status,
-    })),
+    })))),
   ];
 
   await Promise.all([
