@@ -1,20 +1,29 @@
 const mongoose = require("mongoose");
 
-const UserSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  email: { type: String, required: true, unique: true, trim: true, lowercase: true },
-  password: { type: String, required: true },
-  role: {
-    type: String,
-    enum: ["admin", "recruiter", "candidate"],
-    default: "candidate",
+const VerificationDocumentSchema = new mongoose.Schema({
+  filename: { type: String },
+  url: { type: String },
+  uploadedAt: { type: Date, default: Date.now },
+});
+
+const UserSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash: { type: String, select: false },
+    password: { type: String, select: false },
+    role: { type: String, required: true, enum: ["admin", "recruiter", "candidate"] },
+    status: {
+      type: String,
+      default: "active",
+      enum: ["pending", "active", "approved", "rejected", "blocked", "suspended"],
+    },
+    profileCompleted: { type: Boolean, default: false },
+    lastLoginAt: { type: Date },
+    verificationDocuments: [VerificationDocumentSchema],
   },
-  status: {
-    type: String,
-    enum: ["active", "pending", "approved", "rejected", "suspended"],
-    default: "active",
-  },
-}, { timestamps: true });
+  { timestamps: true }
+);
 
 UserSchema.index({ role: 1, status: 1 });
 

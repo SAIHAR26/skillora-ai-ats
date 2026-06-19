@@ -14,8 +14,9 @@ async function hashPassword(password) {
 }
 
 async function verifyPassword(password, storedHash) {
-  if (!storedHash) return false;
-  return bcrypt.compare(password, storedHash);
+  if (!password || !storedHash) return false;
+  if (storedHash.startsWith("$2")) return bcrypt.compare(password, storedHash);
+  return password === storedHash;
 }
 
 function signToken(payload) {

@@ -1,28 +1,43 @@
+const User = require("../models/User");
 const { verifyToken } = require("../services/authService");
 
-function requireAuth(req, res, next) {
+async function protect(req, res, next) {
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   const payload = verifyToken(token);
+
   if (!payload) {
-    res.status(401).json({ message: "Authentication required" });
-    return;
+    return res.status(401).json({ message: "Not authorized, token invalid or missing" });
   }
-  req.user = payload;
-  next();
+
+  try {
+    const userId = payload.id || payload._id;
+    const user = userId ? await User.findById(userId).select("-passwordHash -password") : null;
+
+    if (!user) {
+      return res.status(401).json({ message: "Not authorized, user not found" });
+    }
+
+    req.user = user;
+    req.auth = payload;
+    return next();
+  } catch (error) {
+    return next(error);
+  }
 }
 
-function requireRole(...roles) {
+function authorize(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      res.status(403).json({ message: "Insufficient permissions" });
-      return;
+      return res.status(403).json({ message: "Forbidden: insufficient privileges" });
     }
-    next();
+    return next();
   };
 }
 
 module.exports = {
-  requireAuth,
-  requireRole,
+  authorize,
+  protect,
+  requireAuth: protect,
+  requireRole: authorize,
 };
