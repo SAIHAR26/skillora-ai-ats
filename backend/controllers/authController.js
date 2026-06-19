@@ -40,7 +40,8 @@ const register = asyncHandler(async (req, res) => {
   }
 
   const status = role === "recruiter" ? "pending" : "active";
-  const user = await User.create({ name, email, password: hashPassword(password), role, status });
+  const passwordHash = await hashPassword(password);
+  const user = await User.create({ name, email, password: passwordHash, role, status });
 
   if (role === "candidate") {
     await Candidate.create({
@@ -98,7 +99,8 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findOne({ email });
-  if (!user || (role && user.role !== role) || !verifyPassword(password, user.password)) {
+  const passwordMatches = user ? await verifyPassword(password, user.password) : false;
+  if (!user || (role && user.role !== role) || !passwordMatches) {
     res.status(401).json({ message: "Invalid credentials" });
     return;
   }
