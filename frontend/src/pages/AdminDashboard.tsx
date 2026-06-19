@@ -172,7 +172,7 @@ function UserManagement() {
   const [activeSubTab, setActiveSubTab] = useState<"recruiters" | "candidates">("recruiters");
   const [search, setSearch] = useState("");
   const [recruiters, setRecruiters] = useState<Recruiter[]>(mockRecruiters);
-  const [candidates] = useState<Candidate[]>(mockCandidates);
+  const [candidates, setCandidates] = useState<Candidate[]>(mockCandidates);
 
   const filteredRecruiters = recruiters.filter(
     (r) =>
@@ -185,8 +185,25 @@ function UserManagement() {
       c.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleDeleteRecruiter = (id: string) => {
+  const handleDeleteRecruiter = async (id: string) => {
+    try {
+      await apiRequest(`/recruiters/${id}`, { method: "DELETE" });
+    } catch {
+      // Keep local workflow responsive if the backend is unreachable.
+    }
     setRecruiters(recruiters.filter((r) => r.id !== id));
+  };
+
+  const handleSuspendCandidate = async (id: string) => {
+    try {
+      await apiRequest(`/candidates/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "suspended" }),
+      });
+    } catch {
+      // Keep local workflow responsive if the backend is unreachable.
+    }
+    setCandidates(candidates.map((c) => (c.id === id ? { ...c, status: "suspended" } : c)));
   };
 
   return (
@@ -294,7 +311,7 @@ function UserManagement() {
                     <div className="flex items-center gap-2">
                       <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" style={{ color: "#0071e3" }}><Eye size={14} /></button>
                       <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" style={{ color: "#f5a623" }}><AlertTriangle size={14} /></button>
-                      <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" style={{ color: "#e74c3c" }}><Ban size={14} /></button>
+                      <button onClick={() => handleSuspendCandidate(cand.id)} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors" style={{ color: "#e74c3c" }}><Ban size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -683,7 +700,19 @@ function InterviewManagement() {
 
 // Feedback & Support
 function FeedbackSupport() {
-  const [complaints] = useState<Complaint[]>(mockComplaints);
+  const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
+
+  const handleResolve = async (id: string) => {
+    try {
+      await apiRequest(`/complaints/${id}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status: "resolved" }),
+      });
+    } catch {
+      // Keep local workflow responsive if the backend is unreachable.
+    }
+    setComplaints(complaints.map((c) => (c.id === id ? { ...c, status: "resolved" } : c)));
+  };
 
   return (
     <div className="space-y-6">
@@ -715,7 +744,7 @@ function FeedbackSupport() {
             </div>
             {comp.status === "open" && (
               <div className="mt-4 flex gap-3">
-                <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80" style={{ background: "#d4edda", color: "#155724" }}>
+                <button onClick={() => handleResolve(comp.id)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80" style={{ background: "#d4edda", color: "#155724" }}>
                   <CheckSquare size={16} /> Mark Resolved
                 </button>
               </div>

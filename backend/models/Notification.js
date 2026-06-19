@@ -8,7 +8,7 @@ const NotificationSchema = new mongoose.Schema(
     userId: { type: FlexibleId, ref: "User", required: true, index: true },
     type: {
       type: String,
-      enum: ["welcome", "application_received", "status_update", "interview_invite", "offer", "rejection", "general"],
+      enum: ["welcome", "application_received", "status_update", "interview_invite", "offer", "rejection", "general", "announcement"],
       default: "general",
     },
     title: { type: String, required: true, trim: true },

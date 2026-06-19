@@ -1,29 +1,33 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "skillora-secret";
-
-function hashPassword(password) {
-  return bcrypt.hashSync(password, 10);
+function getJwtSecret() {
+  if (process.env.JWT_SECRET) return process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET must be configured in production");
+  }
+  return "skillora-development-secret";
 }
 
-function verifyPassword(password, stored) {
-  if (!password || !stored) return false;
-  if (stored.startsWith("$2")) {
-    return bcrypt.compareSync(password, stored);
-  }
-  return password === stored;
+async function hashPassword(password) {
+  return bcrypt.hash(password, 10);
+}
+
+async function verifyPassword(password, storedHash) {
+  if (!password || !storedHash) return false;
+  if (storedHash.startsWith("$2")) return bcrypt.compare(password, storedHash);
+  return password === storedHash;
 }
 
 function signToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: "7d" });
 }
 
 function verifyToken(token) {
   if (!token) return null;
   try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (_error) {
+    return jwt.verify(token, getJwtSecret());
+  } catch {
     return null;
   }
 }

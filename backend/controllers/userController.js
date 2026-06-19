@@ -1,4 +1,6 @@
 const User = require("../models/User");
+const Candidate = require("../models/Candidate");
+const Recruiter = require("../models/Recruiter");
 const { toClient } = require("../services/platformDataService");
 
 const asyncHandler = (handler) => async (req, res, next) => {
@@ -16,8 +18,10 @@ const publicUser = (user) => {
   return value;
 };
 
+const userFilter = (id) => (id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : { id });
+
 const getUserById = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id).select("-passwordHash -password");
+  const user = await User.findOne(userFilter(req.params.id)).select("-passwordHash -password");
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
@@ -45,7 +49,7 @@ const getMe = asyncHandler(async (req, res) => {
 
 const updateUserStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
-  const user = await User.findById(req.params.id);
+  const user = await User.findOne(userFilter(req.params.id));
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
@@ -54,7 +58,23 @@ const updateUserStatus = asyncHandler(async (req, res) => {
   return res.json({ message: "User status updated", user: publicUser(user) });
 });
 
+const deleteUser = asyncHandler(async (req, res) => {
+  const user = await User.findOne(userFilter(req.params.id));
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  await Promise.all([
+    Candidate.deleteMany({ $or: [{ userId: user._id }, { email: user.email }] }),
+    Recruiter.deleteMany({ $or: [{ userId: user._id }, { email: user.email }] }),
+  ]);
+  await user.deleteOne();
+
+  return res.json({ message: "User deleted" });
+});
+
 module.exports = {
+  deleteUser,
   getMe,
   getUserById,
   getUsers,

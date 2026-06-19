@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useState, useEffect, createContext, useContext } from "react";
-import HomePage from "./pages/HomePage";
-import LoginPage from "./pages/LoginPage";
-import SignupPage from "./pages/SignupPage";
-import AdminDashboard from "./pages/AdminDashboard";
-import RecruiterDashboard from "./pages/RecruiterDashboard";
-import CandidateDashboard from "./pages/CandidateDashboard";
+import { useState, useEffect, createContext, useContext, lazy, Suspense } from "react";
+const HomePage = lazy(() => import("./pages/HomePage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const SignupPage = lazy(() => import("./pages/SignupPage"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const RecruiterDashboard = lazy(() => import("./pages/RecruiterDashboard"));
+const CandidateDashboard = lazy(() => import("./pages/CandidateDashboard"));
 import { fetchPlatformSnapshot } from "./services/platformApi";
 import type { AuthUser } from "./services/platformApi";
 
@@ -46,7 +46,8 @@ function ProtectedRoute({
 
 function AppRoutes() {
   return (
-    <Routes>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
@@ -76,7 +77,19 @@ function AppRoutes() {
         }
       />
     </Routes>
+    </Suspense>
   );
+}
+
+function readStoredUser(): AuthUser | null {
+  const stored = localStorage.getItem("skillora_user");
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as AuthUser;
+  } catch {
+    localStorage.removeItem("skillora_user");
+    return null;
+  }
 }
 
 export default function App() {
@@ -86,10 +99,7 @@ export default function App() {
     const stored = localStorage.getItem("skillora_role");
     return (stored as UserRole) || null;
   });
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const stored = localStorage.getItem("skillora_user");
-    return stored ? JSON.parse(stored) : null;
-  });
+  const [user, setUser] = useState<AuthUser | null>(readStoredUser);
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem("skillora_logged_in") === "true";
   });

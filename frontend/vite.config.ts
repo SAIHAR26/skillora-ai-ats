@@ -7,6 +7,11 @@ import { inspectAttr } from 'plugin-inspect-react-code'
 export default defineConfig({
   base: './',
   plugins: [inspectAttr(), react()],
+  server: {
+    proxy: {
+      '/api': 'http://localhost:5000',
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

@@ -1,4 +1,7 @@
 const Complaint = require("../models/Complaint");
+const mongoose = require("mongoose");
+
+const complaintFilter = (id) => (mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { id });
 
 exports.createComplaint = async (req, res) => {
   const { userId, subject, message, category } = req.body;
@@ -27,7 +30,7 @@ exports.listComplaints = async (req, res) => {
 };
 
 exports.updateComplaintStatus = async (req, res) => {
-  const complaint = await Complaint.findById(req.params.id);
+  const complaint = await Complaint.findOne(complaintFilter(req.params.id));
   if (!complaint) {
     return res.status(404).json({ message: "Complaint not found" });
   }

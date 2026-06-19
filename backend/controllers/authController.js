@@ -40,7 +40,7 @@ const signup = asyncHandler(async (req, res) => {
   }
 
   const status = role === "recruiter" ? "pending" : "active";
-  const passwordHash = hashPassword(password);
+  const passwordHash = await hashPassword(password);
   const user = await User.create({
     name,
     email,
@@ -118,13 +118,13 @@ const login = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "Email and password are required" });
   }
 
-  const user = await User.findOne({ email: email.toLowerCase() }).select("+password");
+  const user = await User.findOne({ email: email.toLowerCase() }).select("+passwordHash +password");
   if (!user || (role && user.role !== role)) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
   const storedPassword = user.passwordHash || user.password;
-  if (!verifyPassword(password, storedPassword)) {
+  if (!(await verifyPassword(password, storedPassword))) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 

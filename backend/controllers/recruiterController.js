@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Recruiter = require("../models/Recruiter");
 const Job = require("../models/Job");
 const Application = require("../models/Application");
+const User = require("../models/User");
 const { toClient } = require("../services/platformDataService");
 
 const asyncHandler = (handler) => async (req, res, next) => {
@@ -80,7 +81,27 @@ const updateRecruiterStatus = asyncHandler(async (req, res) => {
   recruiter.verificationStatus = req.body.status || recruiter.verificationStatus;
   await recruiter.save();
 
+  if (recruiter.userId && mongoose.Types.ObjectId.isValid(recruiter.userId)) {
+    await User.findByIdAndUpdate(recruiter.userId, {
+      status: req.body.status === "rejected" ? "rejected" : req.body.status === "approved" ? "active" : req.body.status,
+    });
+  }
+
   return res.json({ recruiter: toClient(recruiter) });
+});
+
+const deleteRecruiter = asyncHandler(async (req, res) => {
+  const recruiter = await Recruiter.findOne(recruiterFilter(req.params.id));
+  if (!recruiter) {
+    return res.status(404).json({ message: "Recruiter not found" });
+  }
+
+  if (recruiter.userId && mongoose.Types.ObjectId.isValid(recruiter.userId)) {
+    await User.findByIdAndDelete(recruiter.userId);
+  }
+  await recruiter.deleteOne();
+
+  return res.json({ message: "Recruiter deleted" });
 });
 
 const getRecruiterJobs = asyncHandler(async (req, res) => {
@@ -97,6 +118,7 @@ const getRecruiterApplications = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  deleteRecruiter,
   getRecruiter,
   getRecruiterApplications,
   getRecruiterJobs,
