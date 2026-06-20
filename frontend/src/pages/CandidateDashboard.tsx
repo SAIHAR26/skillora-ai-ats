@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import {
   candidateStats,
+  mockCandidates,
   mockJobs,
   mockApplications,
   mockInterviews,
@@ -139,6 +140,8 @@ function StatCard({ title, value, icon, color, subtext }: { title: string; value
 
 // Dashboard Home
 function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) {
+  const { user } = useAuth();
+  const displayName = user?.name || "Candidate";
   const [recommendations, setRecommendations] = useState<JobRecommendation[]>(fallbackJobRecommendations);
 
   useEffect(() => {
@@ -167,7 +170,7 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
             <Award size={24} style={{ color: "#d4af37" }} />
           </div>
           <div>
-            <h2 className="text-lg font-semibold" style={{ color: "#f2f0e6" }}>Welcome to Skillora, Alex!</h2>
+            <h2 className="text-lg font-semibold" style={{ color: "#f2f0e6" }}>Welcome to Skillora, {displayName}!</h2>
             <p className="text-sm mt-1" style={{ color: "#c3c0b4" }}>
               We are excited to help you discover opportunities, improve your skills, and advance your career.
             </p>
@@ -399,9 +402,12 @@ function ResumeAnalyzer() {
 
 // Job Search
 function JobSearch() {
+  const { user } = useAuth();
+  const currentCandidate = mockCandidates.find((candidate) => candidate.email === user?.email) || mockCandidates[0];
+  const candidateId = currentCandidate?.id || user?.id || "candidate";
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ location: "", type: "", experience: "" });
-  const [appliedJobIds, setAppliedJobIds] = useState(() => new Set(mockApplications.filter((app) => app.candidateId === "cand-1").map((app) => app.jobId)));
+  const [appliedJobIds, setAppliedJobIds] = useState(() => new Set(mockApplications.filter((app) => app.candidateId === candidateId).map((app) => app.jobId)));
 
   const filtered = mockJobs.filter((job) => {
     const matchSearch = job.title.toLowerCase().includes(search.toLowerCase()) || job.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
@@ -479,15 +485,15 @@ function JobSearch() {
               onClick={async () => {
                 const application = {
                   id: `app-${Date.now()}`,
-                  candidateId: "cand-1",
-                  candidateName: "Alex Johnson",
+                  candidateId,
+                  candidateName: currentCandidate?.name || user?.name || "Candidate",
                   jobId: job.id,
                   jobTitle: job.title,
                   company: job.company,
                   atsScore: candidateStats.atsScore,
                   status: "applied",
                   appliedDate: new Date().toISOString().slice(0, 10),
-                  resumeUrl: "/resumes/alex.pdf",
+                  resumeUrl: currentCandidate?.resumeUrl || "",
                 };
                 try {
                   await apiRequest("/platform/applications", {
@@ -909,6 +915,8 @@ function NotificationsPage() {
 
 // Settings
 function SettingsPage() {
+  const { user } = useAuth();
+  const currentCandidate = mockCandidates.find((candidate) => candidate.email === user?.email) || mockCandidates[0];
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Profile Settings</h1>
@@ -918,19 +926,19 @@ function SettingsPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Full Name</label>
-            <input defaultValue="Alex Johnson" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.name || user?.name || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Email</label>
-            <input defaultValue="alex.j@email.com" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.email || user?.email || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Phone</label>
-            <input defaultValue="+1 555-0101" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.phone || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Location</label>
-            <input defaultValue="San Francisco, CA" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.location || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
         </div>
         <button className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>Save Changes</button>
@@ -941,19 +949,19 @@ function SettingsPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>College/University</label>
-            <input defaultValue="MIT" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.college || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Degree</label>
-            <input defaultValue="B.Tech" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.degree || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Specialization</label>
-            <input defaultValue="Computer Science" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.specialization || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>CGPA</label>
-            <input defaultValue="3.8" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.cgpa || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
         </div>
       </div>
@@ -963,11 +971,11 @@ function SettingsPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>LinkedIn</label>
-            <input defaultValue="linkedin.com/in/alexj" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.linkedin || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>GitHub</label>
-            <input defaultValue="github.com/alexj" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentCandidate?.github || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
         </div>
       </div>
@@ -977,6 +985,7 @@ function SettingsPage() {
 
 // Main Candidate Dashboard
 export default function CandidateDashboard() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -1014,7 +1023,7 @@ export default function CandidateDashboard() {
             </button>
             <div className="flex items-center gap-2">
               <img src="/images/candidate-1.jpg" alt="Profile" className="w-8 h-8 rounded-full object-cover" />
-              <span className="text-sm font-medium hidden md:block" style={{ color: "#0a0a0c" }}>Alex Johnson</span>
+              <span className="text-sm font-medium hidden md:block" style={{ color: "#0a0a0c" }}>{user?.name || "Candidate"}</span>
             </div>
           </div>
         </header>

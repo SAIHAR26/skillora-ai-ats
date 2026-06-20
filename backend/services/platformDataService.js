@@ -37,21 +37,41 @@ function toClient(doc) {
 async function seedIfEmpty() {
   if (!isMongoReady()) return { seeded: false, reason: "MongoDB is not connected" };
 
+  const existingDataCount = await Promise.all([
+    Candidate.countDocuments(),
+    Recruiter.countDocuments(),
+    Job.countDocuments(),
+    Application.countDocuments(),
+    Interview.countDocuments(),
+    Message.countDocuments(),
+    Notification.countDocuments(),
+    Complaint.countDocuments(),
+  ]).then((counts) => counts.reduce((total, count) => total + count, 0));
+
+  await ensureSeedLoginAccounts();
+  await ensureSeedProfiles();
+
+  if (existingDataCount > 0) {
+    return { seeded: false, reason: "MongoDB already contains platform data" };
+  }
+
   const users = [
-    { name: "Skillora Admin", email: "admin@skillora.com", passwordHash: await hashPassword("Admin@12345"), role: "admin", status: "active" },
+    { name: "Admin User", email: "admin@skillora.com", passwordHash: await hashPassword("AdminPass123!"), role: "admin", status: "active", profileCompleted: true },
     ...(await Promise.all(seedData.candidates.map(async (candidate) => ({
       name: candidate.name,
       email: candidate.email,
-      passwordHash: await hashPassword("Candidate@12345"),
+      passwordHash: await hashPassword("CandidatePass123!"),
       role: "candidate",
       status: candidate.status,
+      profileCompleted: true,
     })))),
     ...(await Promise.all(seedData.recruiters.map(async (recruiter) => ({
       name: recruiter.name,
       email: recruiter.email,
-      passwordHash: await hashPassword("Recruiter@12345"),
+      passwordHash: await hashPassword("SecurePassword123!"),
       role: "recruiter",
-      status: recruiter.status,
+      status: recruiter.status === "approved" ? "active" : recruiter.status,
+      profileCompleted: true,
     })))),
   ];
 
@@ -76,6 +96,72 @@ async function seedIfEmpty() {
   return { seeded: true };
 }
 
+async function ensureSeedLoginAccounts() {
+  const accounts = [
+    { name: "Admin User", email: "admin@skillora.com", password: "AdminPass123!", role: "admin", status: "active" },
+    { name: "Jane Smith", email: "jane.smith@gmail.com", password: "CandidatePass123!", role: "candidate", status: "active" },
+    { name: "John Doe", email: "recruiter@company.com", password: "SecurePassword123!", role: "recruiter", status: "active" },
+  ];
+
+  await Promise.all(
+    accounts.map(async (account) => {
+      const existing = await User.findOne({ email: account.email }).select("+passwordHash +password");
+      const passwordHash = await hashPassword(account.password);
+      if (existing) {
+        existing.name = account.name;
+        existing.role = account.role;
+        existing.status = account.status;
+        existing.profileCompleted = true;
+        existing.passwordHash = passwordHash;
+        existing.password = undefined;
+        await existing.save();
+        return;
+      }
+
+      await User.create({
+        name: account.name,
+        email: account.email,
+        passwordHash,
+        role: account.role,
+        status: account.status,
+        profileCompleted: true,
+      });
+    }),
+  );
+}
+
+async function ensureSeedProfiles() {
+  await Promise.all([
+    Candidate.updateOne(
+      { id: "cand-1" },
+      {
+        $set: {
+          ...seedData.candidates[0],
+          name: "Jane Smith",
+          email: "jane.smith@gmail.com",
+          phone: "+1-555-0456",
+          phoneNumber: "+1-555-0456",
+        },
+      },
+      { upsert: true },
+    ),
+    Recruiter.updateOne(
+      { id: "rec-1" },
+      {
+        $set: {
+          ...seedData.recruiters[0],
+          name: "John Doe",
+          email: "recruiter@company.com",
+          phone: "+1-555-0123",
+          phoneNumber: "+1-555-0123",
+          companyName: "Tech Solutions Inc",
+          companyEmail: "john.doe@techsolutions.com",
+        },
+      },
+      { upsert: true },
+    ),
+  ]);
+}
 async function upsertSeed(Model, records, key = "id") {
   if (!records.length) return;
   await Model.bulkWrite(
