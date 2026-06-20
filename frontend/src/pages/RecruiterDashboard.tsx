@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import {
   recruiterStats,
+  mockRecruiters,
   mockJobs,
   mockCandidates,
   mockApplications,
@@ -182,6 +183,8 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
 
 // Job Management
 function JobManagement() {
+  const { user } = useAuth();
+  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email) || mockRecruiters[0];
   const [jobs, setJobs] = useState<Job[]>(mockJobs);
   const [showForm, setShowForm] = useState(false);
   const [newJob, setNewJob] = useState({ title: "", description: "", skills: "", experience: "", salary: "", location: "", type: "Remote", deadline: "" });
@@ -192,7 +195,7 @@ function JobManagement() {
       id: `job-${jobs.length + 1}`,
       title: newJob.title,
       description: newJob.description,
-      company: "TechCorp",
+      company: currentRecruiter?.companyName || "",
       location: newJob.location,
       type: newJob.type as "Remote" | "Hybrid" | "On-site",
       salary: newJob.salary,
@@ -802,6 +805,8 @@ function Messages() {
 
 // Contact Admin
 function ContactAdmin() {
+  const { user } = useAuth();
+  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email) || mockRecruiters[0];
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
@@ -812,8 +817,8 @@ function ContactAdmin() {
       await apiRequest("/platform/complaints", {
         method: "POST",
         body: JSON.stringify({
-          userId: "rec-1",
-          userName: "Jennifer Walsh",
+          userId: currentRecruiter?.id || user?.id || "recruiter",
+          userName: currentRecruiter?.name || user?.name || "Recruiter",
           userRole: "recruiter",
           subject,
           description: message,
@@ -892,6 +897,8 @@ function ContactAdmin() {
 
 // Settings
 function SettingsPage() {
+  const { user } = useAuth();
+  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email) || mockRecruiters[0];
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Settings</h1>
@@ -901,19 +908,19 @@ function SettingsPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Name</label>
-            <input defaultValue="Jennifer Walsh" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentRecruiter?.name || user?.name || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Email</label>
-            <input defaultValue="jennifer@techcorp.com" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentRecruiter?.email || user?.email || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Company</label>
-            <input defaultValue="TechCorp" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentRecruiter?.companyName || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Phone</label>
-            <input defaultValue="+1 555-0201" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input defaultValue={currentRecruiter?.phone || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
         </div>
         <button className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>Save Changes</button>
@@ -948,6 +955,7 @@ function SettingsPage() {
 
 // Main Recruiter Dashboard
 export default function RecruiterDashboard() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -991,7 +999,7 @@ export default function RecruiterDashboard() {
             </button>
             <div className="flex items-center gap-2">
               <img src="/images/recruiter-1.jpg" alt="Profile" className="w-8 h-8 rounded-full object-cover" />
-              <span className="text-sm font-medium hidden md:block" style={{ color: "#0a0a0c" }}>Jennifer Walsh</span>
+              <span className="text-sm font-medium hidden md:block" style={{ color: "#0a0a0c" }}>{user?.name || "Recruiter"}</span>
             </div>
           </div>
         </header>

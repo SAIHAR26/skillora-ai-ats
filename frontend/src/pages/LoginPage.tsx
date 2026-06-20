@@ -223,9 +223,9 @@ export default function LoginPage() {
               <p className="font-semibold mb-2" style={{ color: "#0a0a0c" }}>
                 Seeded account examples:
               </p>
-              <p>admin@skillora.com / Admin@12345</p>
-              <p>alex.j@email.com / Candidate@12345</p>
-              <p>jennifer@techcorp.com / Recruiter@12345</p>
+              <p>admin@skillora.com / AdminPass123!</p>
+              <p>jane.smith@gmail.com / CandidatePass123!</p>
+              <p>recruiter@company.com / SecurePassword123!</p>
             </div>
           </form>
         </div>

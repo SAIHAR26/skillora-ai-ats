@@ -99,14 +99,14 @@ const jobs = [
 const candidates = [
   {
     id: "cand-1",
-    name: "Alex Johnson",
-    email: "alex.j@email.com",
-    phone: "+1 555-0101",
+    name: "Jane Smith",
+    email: "jane.smith@gmail.com",
+    phone: "+1-555-0456",
     avatar: "/images/candidate-1.jpg",
-    college: "MIT",
-    degree: "B.Tech",
+    college: "University of California",
+    degree: "Bachelor of Science",
     specialization: "Computer Science",
-    graduationYear: "2024",
+    graduationYear: "2019",
     cgpa: 3.8,
     skills: ["Python", "React", "SQL", "Machine Learning"],
     education: ["B.Tech Computer Science, MIT"],
@@ -116,9 +116,9 @@ const candidates = [
     location: "San Francisco, CA",
     preferredLocation: "Remote",
     workPreference: "Full-time",
-    linkedin: "linkedin.com/in/alexj",
-    github: "github.com/alexj",
-    resumeUrl: "/resumes/alex.pdf",
+    linkedin: "https://linkedin.com/in/janesmith",
+    github: "https://github.com/janesmith",
+    resumeUrl: "/resumes/jane-smith.pdf",
     appliedJobs: ["job-1", "job-2"],
     status: "active",
   },
@@ -227,19 +227,19 @@ const candidates = [
 const recruiters = [
   {
     id: "rec-1",
-    name: "Jennifer Walsh",
-    email: "jennifer@techcorp.com",
-    companyEmail: "hr@techcorp.com",
-    phone: "+1 555-0201",
+    name: "John Doe",
+    email: "recruiter@company.com",
+    companyEmail: "john.doe@techsolutions.com",
+    phone: "+1-555-0123",
     avatar: "/images/recruiter-1.jpg",
-    companyName: "TechCorp",
-    companyAddress: "123 Market St, San Francisco, CA",
-    companyWebsite: "techcorp.com",
+    companyName: "Tech Solutions Inc",
+    companyAddress: "123 Tech Street, Silicon Valley, CA 94025",
+    companyWebsite: "https://techsolutions.com",
     industry: "Technology",
     companySize: "500-1000",
-    role: "HR Manager",
+    role: "Senior Recruiter",
     experience: "8 years",
-    linkedin: "linkedin.com/in/jenniferw",
+    linkedin: "https://linkedin.com/in/johndoe",
     status: "approved",
     jobsPosted: 1,
     totalApplications: 3,
@@ -288,7 +288,7 @@ const recruiters = [
 ];
 
 const applications = [
-  { id: "app-1", candidateId: "cand-1", candidateName: "Alex Johnson", jobId: "job-1", jobTitle: "Frontend Developer", company: "TechCorp", atsScore: 87, status: "shortlisted", appliedDate: "2026-06-01", resumeUrl: "/resumes/alex.pdf" },
+  { id: "app-1", candidateId: "cand-1", candidateName: "Jane Smith", jobId: "job-1", jobTitle: "Frontend Developer", company: "TechCorp", atsScore: 87, status: "shortlisted", appliedDate: "2026-06-01", resumeUrl: "/resumes/jane-smith.pdf" },
   { id: "app-2", candidateId: "cand-2", candidateName: "Sarah Chen", jobId: "job-2", jobTitle: "Data Scientist", company: "DataFlow Inc", atsScore: 95, status: "interview", appliedDate: "2026-06-02", resumeUrl: "/resumes/sarah.pdf" },
   { id: "app-3", candidateId: "cand-3", candidateName: "Rahul Sharma", jobId: "job-1", jobTitle: "Frontend Developer", company: "TechCorp", atsScore: 91, status: "shortlisted", appliedDate: "2026-06-03", resumeUrl: "/resumes/rahul.pdf" },
   { id: "app-4", candidateId: "cand-4", candidateName: "Priya Patel", jobId: "job-4", jobTitle: "Product Designer", company: "DesignHub", atsScore: 88, status: "applied", appliedDate: "2026-06-04", resumeUrl: "/resumes/priya.pdf" },
@@ -296,14 +296,14 @@ const applications = [
 ];
 
 const interviews = [
-  { id: "int-1", candidateId: "cand-1", candidateName: "Alex Johnson", recruiterId: "rec-1", jobId: "job-1", jobTitle: "Frontend Developer", date: "2026-06-18", time: "10:00 AM", status: "scheduled", meetingLink: "https://meet.skillora.com/int-1", feedback: "" },
+  { id: "int-1", candidateId: "cand-1", candidateName: "Jane Smith", recruiterId: "rec-1", jobId: "job-1", jobTitle: "Frontend Developer", date: "2026-06-18", time: "10:00 AM", status: "scheduled", meetingLink: "https://meet.skillora.com/int-1", feedback: "" },
   { id: "int-2", candidateId: "cand-2", candidateName: "Sarah Chen", recruiterId: "rec-2", jobId: "job-2", jobTitle: "Data Scientist", date: "2026-06-19", time: "2:00 PM", status: "scheduled", meetingLink: "https://meet.skillora.com/int-2", feedback: "" },
   { id: "int-3", candidateId: "cand-3", candidateName: "Rahul Sharma", recruiterId: "rec-1", jobId: "job-1", jobTitle: "Frontend Developer", date: "2026-06-20", time: "11:00 AM", status: "pending", meetingLink: "", feedback: "" },
 ];
 
 const messages = [
-  { id: "msg-1", senderId: "rec-1", senderName: "Jennifer Walsh", senderRole: "recruiter", recipientId: "cand-1", content: "Hi Alex, we'd like to schedule an interview for the Frontend Developer position. Please check available slots.", timestamp: "2026-06-10T10:00:00", read: false },
-  { id: "msg-2", senderId: "cand-1", senderName: "Alex Johnson", senderRole: "candidate", recipientId: "rec-1", content: "Thank you! I've booked a slot for June 18th at 10 AM.", timestamp: "2026-06-10T11:30:00", read: true },
+  { id: "msg-1", senderId: "rec-1", senderName: "John Doe", senderRole: "recruiter", recipientId: "cand-1", content: "Hi Jane, we'd like to schedule an interview for the Frontend Developer position. Please check available slots.", timestamp: "2026-06-10T10:00:00", read: false },
+  { id: "msg-2", senderId: "cand-1", senderName: "Jane Smith", senderRole: "candidate", recipientId: "rec-1", content: "Thank you! I've booked a slot for June 18th at 10 AM.", timestamp: "2026-06-10T11:30:00", read: true },
 ];
 
 const notifications = [
@@ -312,8 +312,8 @@ const notifications = [
 ];
 
 const complaints = [
-  { id: "comp-1", userId: "cand-1", userName: "Alex Johnson", userRole: "candidate", subject: "Unable to upload resume", description: "The resume upload feature returned an error on a PDF upload.", status: "open", createdAt: "2026-06-08" },
-  { id: "comp-2", userId: "rec-1", userName: "Jennifer Walsh", userRole: "recruiter", subject: "Job posting approval delay", description: "A job posting remained pending for three business days.", status: "resolved", createdAt: "2026-06-05" },
+  { id: "comp-1", userId: "cand-1", userName: "Jane Smith", userRole: "candidate", subject: "Unable to upload resume", description: "The resume upload feature returned an error on a PDF upload.", status: "open", createdAt: "2026-06-08" },
+  { id: "comp-2", userId: "rec-1", userName: "John Doe", userRole: "recruiter", subject: "Job posting approval delay", description: "A job posting remained pending for three business days.", status: "resolved", createdAt: "2026-06-05" },
 ];
 
 module.exports = {
