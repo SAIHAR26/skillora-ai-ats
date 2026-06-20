@@ -50,6 +50,7 @@ async function seedIfEmpty() {
 
   await ensureSeedLoginAccounts();
   await ensureSeedProfiles();
+  await repairIncompleteProfiles();
 
   if (existingDataCount > 0) {
     return { seeded: false, reason: "MongoDB already contains platform data" };
@@ -101,6 +102,7 @@ async function ensureSeedLoginAccounts() {
     { name: "Admin User", email: "admin@skillora.com", password: "AdminPass123!", role: "admin", status: "active" },
     { name: "Jane Smith", email: "jane.smith@gmail.com", password: "CandidatePass123!", role: "candidate", status: "active" },
     { name: "John Doe", email: "recruiter@company.com", password: "SecurePassword123!", role: "recruiter", status: "active" },
+    { name: "Lasya", email: "lasya@skillora.com", password: "LasyaPass123!", role: "candidate", status: "active" },
   ];
 
   await Promise.all(
@@ -145,6 +147,15 @@ async function ensureSeedProfiles() {
       },
       { upsert: true },
     ),
+    Candidate.updateOne(
+      { id: "cand-lasya" },
+      { $set: seedData.candidates.find((candidate) => candidate.id === "cand-lasya") },
+      { upsert: true },
+    ),
+    Candidate.updateMany(
+      { name: /^lasya$/i },
+      { $set: seedData.candidates.find((candidate) => candidate.id === "cand-lasya") },
+    ),
     Recruiter.updateOne(
       { id: "rec-1" },
       {
@@ -161,6 +172,63 @@ async function ensureSeedProfiles() {
       { upsert: true },
     ),
   ]);
+}
+async function repairIncompleteProfiles() {
+  const candidateFallbacks = ["/images/candidate-lasya.jpg", "/images/candidate-1.jpg", "/images/candidate-2.jpg"];
+  const recruiterFallbacks = ["/images/recruiter-1.jpg", "/images/recruiter-2.jpg"];
+  const [candidates, recruiters] = await Promise.all([Candidate.find({}).lean(), Recruiter.find({}).lean()]);
+
+  await Promise.all([
+    ...candidates.map((candidate, index) => {
+      const seedMatch = seedData.candidates.find((item) => item.email === candidate.email || item.name === candidate.name || item.id === candidate.id);
+      const isLasya = String(candidate.name || "").toLowerCase() === "lasya" || candidate.email === "lasya@skillora.com";
+      const source = isLasya ? seedData.candidates.find((item) => item.id === "cand-lasya") : seedMatch;
+      const updates = {};
+
+      if (isLasya && source) Object.assign(updates, source);
+      if (!candidate.avatar) updates.avatar = source?.avatar || candidateFallbacks[index % candidateFallbacks.length];
+      if (!candidate.specialization) updates.specialization = source?.specialization || candidate.degree || "Software Engineering";
+      if (!Array.isArray(candidate.skills) || candidate.skills.length === 0) updates.skills = source?.skills || ["JavaScript", "React", "SQL"];
+      if (!candidate.atsScore || Number.isNaN(Number(candidate.atsScore))) updates.atsScore = source?.atsScore || 80;
+      if (!candidate.resumeUrl) updates.resumeUrl = source?.resumeUrl || "";
+
+      if (Object.keys(updates).length === 0) return Promise.resolve();
+      return Candidate.updateOne({ _id: candidate._id }, { $set: updates });
+    }),
+    ...recruiters.map((recruiter, index) => {
+      const seedMatch = seedData.recruiters.find((item) => item.email === recruiter.email || item.name === recruiter.name || item.id === recruiter.id);
+      const updates = {};
+
+      if (!recruiter.avatar) updates.avatar = seedMatch?.avatar || recruiterFallbacks[index % recruiterFallbacks.length];
+      if (!recruiter.companyName) updates.companyName = seedMatch?.companyName || recruiter.company || "Skillora Hiring Partner";
+      if (!recruiter.role) updates.role = seedMatch?.role || recruiter.roleInCompany || "Recruiter";
+      if (recruiter.hiredCount === undefined || recruiter.hiredCount === null || Number.isNaN(Number(recruiter.hiredCount))) updates.hiredCount = seedMatch?.hiredCount || 0;
+
+      if (Object.keys(updates).length === 0) return Promise.resolve();
+      return Recruiter.updateOne({ _id: recruiter._id }, { $set: updates });
+    }),
+  ]);
+}
+
+function withCandidateDefaults(candidate, index = 0) {
+  const fallbackAvatar = String(candidate.name || "").toLowerCase() === "lasya" ? "/images/candidate-lasya.jpg" : index % 2 === 0 ? "/images/candidate-1.jpg" : "/images/candidate-2.jpg";
+  return {
+    ...candidate,
+    avatar: candidate.avatar || fallbackAvatar,
+    role: candidate.specialization || candidate.degree || "Software Engineering",
+    atsScore: Number(candidate.atsScore) || 80,
+    skills: Array.isArray(candidate.skills) && candidate.skills.length ? candidate.skills : ["JavaScript", "React", "SQL"],
+  };
+}
+
+function withRecruiterDefaults(recruiter, index = 0) {
+  return {
+    ...recruiter,
+    avatar: recruiter.avatar || (index % 2 === 0 ? "/images/recruiter-1.jpg" : "/images/recruiter-2.jpg"),
+    companyName: recruiter.companyName || recruiter.company || "Skillora Hiring Partner",
+    role: recruiter.role || recruiter.roleInCompany || "Recruiter",
+    hiredCount: Number(recruiter.hiredCount) || 0,
+  };
 }
 async function upsertSeed(Model, records, key = "id") {
   if (!records.length) return;
@@ -275,22 +343,32 @@ async function getSnapshot() {
     notifications,
     recruiters,
     recruiterStats,
-    topCandidates: [...candidates].sort((a, b) => b.atsScore - a.atsScore).slice(0, 4).map((candidate) => ({
-      id: candidate.id,
-      name: candidate.name,
-      role: candidate.specialization || candidate.degree,
-      atsScore: candidate.atsScore,
-      skills: candidate.skills.slice(0, 3),
-      avatar: candidate.avatar,
-    })),
-    topRecruiters: [...recruiters].sort((a, b) => b.hiredCount - a.hiredCount).slice(0, 3).map((recruiter) => ({
-      id: recruiter.id,
-      name: recruiter.name,
-      company: recruiter.companyName,
-      role: recruiter.role,
-      hires: recruiter.hiredCount,
-      avatar: recruiter.avatar,
-    })),
+    topCandidates: [...candidates]
+      .map(withCandidateDefaults)
+      .filter((candidate) => candidate.name)
+      .sort((a, b) => b.atsScore - a.atsScore)
+      .slice(0, 4)
+      .map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name,
+        role: candidate.role,
+        atsScore: candidate.atsScore,
+        skills: candidate.skills.slice(0, 3),
+        avatar: candidate.avatar,
+      })),
+    topRecruiters: [...recruiters]
+      .map(withRecruiterDefaults)
+      .filter((recruiter) => recruiter.name)
+      .sort((a, b) => b.hiredCount - a.hiredCount)
+      .slice(0, 3)
+      .map((recruiter) => ({
+        id: recruiter.id,
+        name: recruiter.name,
+        company: recruiter.companyName,
+        role: recruiter.role,
+        hires: recruiter.hiredCount,
+        avatar: recruiter.avatar,
+      })),
   };
 }
 

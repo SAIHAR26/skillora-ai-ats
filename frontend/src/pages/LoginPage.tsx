@@ -225,6 +225,7 @@ export default function LoginPage() {
               </p>
               <p>admin@skillora.com / AdminPass123!</p>
               <p>jane.smith@gmail.com / CandidatePass123!</p>
+              <p>lasya@skillora.com / LasyaPass123!</p>
               <p>recruiter@company.com / SecurePassword123!</p>
             </div>
           </form>

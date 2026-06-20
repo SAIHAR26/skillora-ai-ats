@@ -523,8 +523,11 @@ export default function HomePage() {
                 style={{ background: "white", boxShadow: "rgba(0,0,0,0.08) 0px 10px 40px -10px" }}
               >
                 <img
-                  src={candidate.avatar}
+                  src={candidate.avatar || "/images/candidate-1.jpg"}
                   alt={candidate.name}
+                  onError={(event) => {
+                    event.currentTarget.src = candidate.name.toLowerCase() === "lasya" ? "/images/candidate-lasya.jpg" : "/images/candidate-1.jpg";
+                  }}
                   className="w-20 h-20 rounded-full mx-auto mb-4 object-cover"
                 />
                 <h3 className="text-base font-bold mb-1" style={{ color: "#0a0a0c" }}>
@@ -582,8 +585,11 @@ export default function HomePage() {
                 }}
               >
                 <img
-                  src={recruiter.avatar}
+                  src={recruiter.avatar || "/images/recruiter-1.jpg"}
                   alt={recruiter.name}
+                  onError={(event) => {
+                    event.currentTarget.src = "/images/recruiter-1.jpg";
+                  }}
                   className="w-24 h-24 rounded-full mx-auto mb-4 object-cover"
                 />
                 <h3 className="text-lg font-bold mb-1" style={{ color: "#f2f0e6" }}>
