@@ -9,6 +9,9 @@ const ResumeSchema = new mongoose.Schema(
     fileSize: { type: Number, default: 0 },
     extractedText: { type: String, trim: true },
     parsedSkills: [{ type: String, trim: true }],
+    atsScore: { type: Number, min: 0, max: 100 },
+    analysis: { type: Object, default: {} },
+    recommendations: [{ type: String, trim: true }],
     processed: { type: Boolean, default: false },
   },
   { timestamps: true }
