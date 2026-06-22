@@ -1,5 +1,10 @@
 const Application = require("../models/Application");
+const Candidate = require("../models/Candidate");
 const Job = require("../models/Job");
+const Notification = require("../models/Notification");
+
+const idFilter = (id) => (id && id.match && id.match(/^[a-f\d]{24}$/i) ? { _id: id } : { id });
+const statusLabel = (value) => String(value || "applied").replace(/_/g, " ");
 
 exports.createApplication = async (req, res) => {
   const { jobId, candidateId, resumeId, score, remarks } = req.body;
@@ -8,27 +13,52 @@ exports.createApplication = async (req, res) => {
     return res.status(400).json({ message: "Job ID and candidate ID are required" });
   }
 
-  const job = await Job.findById(jobId);
+  const job = await Job.findOne(idFilter(jobId));
   if (!job || job.status !== "open" || !job.active) {
     return res.status(400).json({ message: "Job is not available for applications" });
   }
 
-  const existing = await Application.findOne({ jobId, candidateId });
+  const candidate = await Candidate.findOne(idFilter(candidateId));
+  if (!candidate) {
+    return res.status(404).json({ message: "Candidate not found" });
+  }
+
+  const existing = await Application.findOne({
+    $or: [
+      { jobId: job._id, candidateId: candidate._id },
+      { jobId: job.id, candidateId: candidate.id },
+      { jobId, candidateId },
+    ],
+  });
   if (existing) {
     return res.status(409).json({ message: "Candidate already applied for this job" });
   }
 
   const application = await Application.create({
-    jobId,
-    candidateId,
+    jobId: job._id,
+    candidateId: candidate._id,
+    candidateName: candidate.name,
+    jobTitle: job.title,
+    company: job.company,
     resumeId,
-    score: score || 0,
+    atsScore: score || candidate.atsScore || 0,
+    score: score || candidate.atsScore || 0,
     remarks,
     status: "applied",
+    appliedDate: new Date().toISOString().slice(0, 10),
   });
 
   job.totalApplicants += 1;
+  job.applications = (job.applications || 0) + 1;
   await job.save();
+
+  await Notification.create({
+    userId: candidate.userId || candidate._id,
+    type: "application_received",
+    title: "Application submitted",
+    message: `Your application for ${job.title} has been submitted.`,
+    metadata: { applicationId: application._id, jobId: job._id },
+  });
 
   res.status(201).json({ message: "Application created", application });
 };
@@ -68,6 +98,24 @@ exports.updateApplicationStatus = async (req, res) => {
   if (status) application.status = status;
   application.updatedAt = new Date();
   await application.save();
+
+  const candidate = await Candidate.findById(application.candidateId);
+  if (candidate && status) {
+    const typeByStatus = {
+      shortlisted: "application_shortlisted",
+      rejected: "application_rejected",
+      selected: "application_accepted",
+      interview: "interview_scheduled",
+      interview_scheduled: "interview_scheduled",
+    };
+    await Notification.create({
+      userId: candidate.userId || candidate._id,
+      type: typeByStatus[status] || "status_update",
+      title: "Application status updated",
+      message: `Your application status is now ${statusLabel(status)}.`,
+      metadata: { applicationId: application._id, status },
+    });
+  }
 
   res.json({ message: "Application status updated", application });
 };

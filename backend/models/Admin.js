@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const AdminSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    singletonKey: { type: String, default: "primary", enum: ["primary"], unique: true },
     // Personal Information
     phoneNumber: { type: String, trim: true },
     department: { type: String, trim: true },
@@ -29,5 +30,7 @@ const AdminSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+AdminSchema.index({ userId: 1 }, { unique: true });
 
 module.exports = mongoose.model("Admin", AdminSchema);

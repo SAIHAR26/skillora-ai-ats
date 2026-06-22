@@ -2,6 +2,7 @@ const express = require("express");
 const {
   addResume,
   getCandidate,
+  getCurrentCandidate,
   getCandidateApplications,
   getCandidateResumes,
   listCandidates,
@@ -12,6 +13,7 @@ const { requireAuth } = require("../middleware/authMiddleware");
 const router = express.Router();
 
 router.get("/", requireAuth, listCandidates);
+router.get("/me/profile", requireAuth, getCurrentCandidate);
 router.get("/:id", requireAuth, getCandidate);
 router.patch("/:id", requireAuth, updateCandidate);
 router.put("/:id", requireAuth, updateCandidate);
