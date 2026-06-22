@@ -5,15 +5,21 @@ require("dotenv").config();
 const connectDB = require("./config/db");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 
-const aiRoutes = require("./routes/aiRoutes");
+// Routes
 const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
+const recruiterRoutes = require("./routes/recruiterRoutes");
 const candidateRoutes = require("./routes/candidateRoutes");
 const jobRoutes = require("./routes/jobRoutes");
+const applicationRoutes = require("./routes/applications");
+const interviewRoutes = require("./routes/interviews");
+const notificationRoutes = require("./routes/notifications");
+const complaintRoutes = require("./routes/complaints");
+const messageRoutes = require("./routes/messages");
 const platformRoutes = require("./routes/platformRoutes");
-const recruiterRoutes = require("./routes/recruiterRoutes");
-const userRoutes = require("./routes/userRoutes");
+const aiRoutes = require("./routes/aiRoutes");
 
-// Load all models so Mongoose refs are registered before route handlers run.
+// Models (register schemas)
 require("./models/User");
 require("./models/Recruiter");
 require("./models/Candidate");
@@ -29,43 +35,40 @@ require("./models/Opportunity");
 
 const app = express();
 
+// Middleware
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
+// DB connect
 connectDB();
 
-app.get("/", (_req, res) => {
+// Basic routes
+app.get("/", (req, res) => {
   res.send("Skillora backend running successfully");
 });
 
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    service: "skillora-backend",
-  });
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
 });
 
-app.use("/api/ai", aiRoutes);
+// API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/recruiters", recruiterRoutes);
-app.use("/api/recruit", recruiterRoutes);
 app.use("/api/candidates", candidateRoutes);
 app.use("/api/jobs", jobRoutes);
+
+// ✅ IMPORTANT FIX (APPLICATIONS)
+app.use("/api/applications", applicationRoutes);
+app.use("/api/interviews", interviewRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/complaints", complaintRoutes);
+app.use("/api/messages", messageRoutes);
+
 app.use("/api/platform", platformRoutes);
+app.use("/api/ai", aiRoutes);
 
-// Compatibility route modules kept for existing clients.
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/users", require("./routes/users"));
-app.use("/api/recruiters", require("./routes/recruiters"));
-app.use("/api/candidates", require("./routes/candidates"));
-app.use("/api/jobs", require("./routes/jobs"));
-app.use("/api/applications", require("./routes/applications"));
-app.use("/api/interviews", require("./routes/interviews"));
-app.use("/api/notifications", require("./routes/notifications"));
-app.use("/api/complaints", require("./routes/complaints"));
-app.use("/api/opportunities", require("./routes/opportunities"));
-
+// Error handlers
 app.use(notFound);
 app.use(errorHandler);
 

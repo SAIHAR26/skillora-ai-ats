@@ -6,22 +6,33 @@ const {
   getJobs,
   getJobById,
   updateJob,
-  deleteJob
+  deleteJob,
+  updateJobStatus,
+  pauseJob,
+  resumeJob,
+  closeJob,
+  getJobApplications,
 } = require("../controllers/jobController");
+const { protect } = require("../middleware/authMiddleware");
 
 // CREATE JOB
-router.post("/", createJob);
+router.post("/", protect, createJob);
 
 // GET ALL JOBS
-router.get("/", getJobs);
+router.get("/", protect, getJobs);
 
 // GET SINGLE JOB
-router.get("/:id", getJobById);
+router.get("/:id", protect, getJobById);
 
 // UPDATE JOB
-router.put("/:id", updateJob);
+router.put("/:id", protect, updateJob);
+router.patch("/:id/status", protect, updateJobStatus);
+router.patch("/:id/pause", protect, pauseJob);
+router.patch("/:id/resume", protect, resumeJob);
+router.patch("/:id/close", protect, closeJob);
+router.get("/:id/applications", protect, getJobApplications);
 
 // DELETE JOB
-router.delete("/:id", deleteJob);
+router.delete("/:id", protect, deleteJob);
 
 module.exports = router;

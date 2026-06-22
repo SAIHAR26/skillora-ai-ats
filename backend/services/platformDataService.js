@@ -278,8 +278,6 @@ async function getCollectionsReport() {
 }
 
 async function getSnapshot() {
-  await seedIfEmpty();
-
   const [
     candidates,
     recruiters,

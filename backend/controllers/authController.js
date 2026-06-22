@@ -167,7 +167,34 @@ const updateProfile = asyncHandler(async (req, res) => {
 
   await user.save();
 
-  return res.json({ message: "Profile updated", user: publicUser(user) });
+  let profile = null;
+  if (user.role === "recruiter") {
+    profile = await Recruiter.findOne({ $or: [{ userId: user._id }, { email: user.email }] });
+    if (profile) {
+      const fields = [
+        "companyName",
+        "name",
+        "industry",
+        "companyWebsite",
+        "website",
+        "location",
+        "phone",
+        "phoneNumber",
+        "companyDescription",
+        "description",
+        "companyEmail",
+        "companyAddress",
+      ];
+      fields.forEach((field) => {
+        if (req.body[field] !== undefined) profile[field === "website" ? "companyWebsite" : field] = req.body[field];
+      });
+      if (email) profile.email = email.toLowerCase();
+      if (name) profile.name = name;
+      await profile.save();
+    }
+  }
+
+  return res.json({ message: "Profile updated", user: publicUser(user), profile: profile ? toClient(profile) : null });
 });
 
 const logout = asyncHandler(async (_req, res) => {
