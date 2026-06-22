@@ -3,14 +3,40 @@ const Application = require("../models/Application");
 
 exports.listJobs = async (req, res) => {
   const filters = { published: true, active: true };
-  const { recruiterId, status, location, employmentType, title, skill } = req.query;
+  const { recruiterId, status, location, employmentType, jobType, type, title, company, skill, skills, experienceLevel, experience, search } = req.query;
 
   if (recruiterId) filters.recruiterId = recruiterId;
   if (status) filters.status = status;
   if (location) filters.location = new RegExp(location, "i");
-  if (employmentType) filters.employmentType = employmentType;
+  if (employmentType || jobType || type) {
+    const value = employmentType || jobType || type;
+    filters.$or = [...(filters.$or || []), { employmentType: new RegExp(value, "i") }, { type: new RegExp(value, "i") }];
+  }
   if (title) filters.title = new RegExp(title, "i");
-  if (skill) filters.skillsRequired = { $in: [new RegExp(skill, "i")] };
+  if (company) filters.company = new RegExp(company, "i");
+  if (experienceLevel || experience) {
+    const value = experienceLevel || experience;
+    filters.$or = [...(filters.$or || []), { experienceLevel: new RegExp(value, "i") }, { experience: new RegExp(value, "i") }];
+  }
+  if (skill || skills) {
+    const value = skill || skills;
+    filters.$or = [...(filters.$or || []), { skillsRequired: { $in: [new RegExp(value, "i")] } }, { skills: { $in: [new RegExp(value, "i")] } }];
+  }
+  if (search) {
+    const regex = new RegExp(search, "i");
+    filters.$or = [
+      ...(filters.$or || []),
+      { title: regex },
+      { company: regex },
+      { location: regex },
+      { experienceLevel: regex },
+      { experience: regex },
+      { employmentType: regex },
+      { type: regex },
+      { skillsRequired: { $in: [regex] } },
+      { skills: { $in: [regex] } },
+    ];
+  }
 
   const jobs = await Job.find(filters).sort({ createdAt: -1 });
   res.json(jobs);

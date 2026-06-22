@@ -5,6 +5,7 @@
 - Users
 - Recruiters
 - Candidates
+- Admins
 
 ## Fields Verified
 
@@ -50,6 +51,16 @@
 - workPreference
 - resumeIds
 
+### Admin Collection
+- userId
+- singletonKey
+- phoneNumber
+- department
+- permissions
+- adminLevel
+- isActive
+- notes
+
 ## Authentication Database Status
 
 Verified:
@@ -58,6 +69,7 @@ Verified:
 - JWT Authentication
 - Password Hash Storage
 - Role-Based Authentication
+- Single Admin Creation
 
 
 ## Database Operations
@@ -76,3 +88,4 @@ Verified:
 MongoDB connected successfully.
 Collections verified successfully.
 Authentication working correctly.
+Only one admin account is allowed.

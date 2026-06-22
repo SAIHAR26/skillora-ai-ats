@@ -1,81 +1,136 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
 import {
-  LayoutDashboard,
-  FileText,
-  Search,
-  Calendar,
-  MessageSquare,
-  Bell,
-  Settings,
-  LogOut,
-  Upload,
-  Brain,
-  CheckCircle,
-  XCircle,
-  Star,
-  MapPin,
-  DollarSign,
-  Briefcase,
-  Clock,
-  ChevronRight,
-  Send,
   AlertTriangle,
-  BookOpen,
-  Target,
   Award,
-  Zap,
-  Menu,
+  Bell,
+  BookOpen,
+  Brain,
+  Briefcase,
+  Calendar,
+  CheckCircle,
   ExternalLink,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  MessageSquare,
+  Search,
+  Send,
+  Settings,
+  Star,
+  Target,
+  Upload,
+  XCircle,
+  Zap,
 } from "lucide-react";
-import {
-  candidateStats,
-  mockCandidates,
-  mockJobs,
-  mockApplications,
-  mockInterviews,
-  skillGapData,
-  aiJobRecommendations,
-  mockMessages,
-  mockNotifications,
-} from "../data/mockData";
-import {
-  fetchSkillGap,
-  recommendJobs,
-  scoreResume,
-} from "../services/aiRanking";
-import type {
-  JobRecommendation,
-  ResumeScoreResult,
-  SkillGapResult,
-} from "../services/aiRanking";
+import { fetchSkillGap, recommendJobs, scoreResume } from "../services/aiRanking";
+import type { JobRecommendation, ResumeScoreResult, SkillGapResult } from "../services/aiRanking";
 import { apiRequest } from "../services/platformApi";
 
-const fallbackJobRecommendations = (): JobRecommendation[] =>
-  aiJobRecommendations.map((rec) => ({
-    ...rec,
-    industry: "",
-    location: "",
-    reason: "Local sample recommendation",
-  }));
+type Candidate = {
+  _id?: string;
+  id?: string;
+  userId?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  currentLocation?: string;
+  location?: string;
+  college?: string;
+  degree?: string;
+  specialization?: string;
+  graduationYear?: string | number;
+  cgpa?: number;
+  linkedin?: string;
+  github?: string;
+  skills?: string[];
+  preferredJobTypes?: string[];
+  experienceLevel?: string;
+  experienceYears?: number;
+  resumeUrl?: string;
+  atsScore?: number;
+};
 
-const fallbackSkillGapResult = (): SkillGapResult => ({
-  targetJob: fallbackJobRecommendations()[0],
-  matched: skillGapData.matched,
-  missing: skillGapData.missing,
-  learningPath: [
-    { step: 1, title: "Docker Fundamentals", duration: "2 weeks", type: "Course" },
-    { step: 2, title: "AWS Cloud Practitioner", duration: "4 weeks", type: "Certification" },
-    { step: 3, title: "GraphQL Basics", duration: "1 week", type: "Tutorial" },
-    { step: 4, title: "Microservices Architecture", duration: "3 weeks", type: "Course" },
-  ],
-});
+type Job = {
+  _id?: string;
+  id?: string;
+  title: string;
+  company?: string;
+  location?: string;
+  skillsRequired?: string[];
+  skills?: string[];
+  employmentType?: string;
+  type?: string;
+  experienceLevel?: string;
+  experience?: string;
+  salary?: string;
+  salaryRange?: { min?: number; max?: number };
+  applicationDeadline?: string;
+};
+
+type Application = {
+  _id?: string;
+  id?: string;
+  candidateId?: string | Candidate;
+  jobId?: string | Job;
+  jobTitle?: string;
+  company?: string;
+  status?: string;
+  appliedAt?: string;
+  appliedDate?: string;
+  atsScore?: number;
+  score?: number;
+};
+
+type Interview = {
+  _id?: string;
+  id?: string;
+  candidateId?: string;
+  jobTitle?: string;
+  date?: string;
+  time?: string;
+  scheduledAt?: string;
+  status?: string;
+  feedback?: string;
+  meetingLink?: string;
+  recruiterId?: string;
+};
+
+type Notification = {
+  _id?: string;
+  id?: string;
+  type?: string;
+  title: string;
+  message: string;
+  status?: string;
+  timestamp?: string;
+  createdAt?: string;
+};
+
+type Message = {
+  _id?: string;
+  id?: string;
+  senderId: string;
+  senderName?: string;
+  senderRole?: string;
+  recipientId: string;
+  content: string;
+  timestamp?: string;
+  read?: boolean;
+};
+
+const candidateKey = (candidate?: Candidate | null) => candidate?._id || candidate?.id || "";
+const jobKey = (job?: Job | null) => job?._id || job?.id || "";
+const jobSkills = (job: Job) => job.skillsRequired?.length ? job.skillsRequired : job.skills || [];
+const statusLabel = (value?: string) => (value || "applied").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString() : "Not scheduled";
+const profileFields = ["name", "email", "phone", "location", "college", "degree", "skills", "resumeUrl"] as const;
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
-
   const links = [
     { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
     { key: "resume", label: "Resume Analyzer", icon: <FileText size={18} /> },
@@ -99,22 +154,14 @@ function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; se
       </div>
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto custom-scrollbar">
         {links.map((link) => (
-          <button key={link.key} onClick={() => setActiveTab(link.key)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
-            style={{
-              background: activeTab === link.key ? "#e8f0fe" : "transparent",
-              color: activeTab === link.key ? "#0071e3" : "#6c6c6c",
-              justifyContent: collapsed ? "center" : "flex-start",
-            }}>
+          <button key={link.key} onClick={() => setActiveTab(link.key)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all" style={{ background: activeTab === link.key ? "#e8f0fe" : "transparent", color: activeTab === link.key ? "#0071e3" : "#6c6c6c", justifyContent: collapsed ? "center" : "flex-start" }}>
             {link.icon}
             {!collapsed && <span>{link.label}</span>}
           </button>
         ))}
       </nav>
       <div className="p-2" style={{ borderTop: "1px solid #e5e5e5" }}>
-        <button onClick={() => { logout(); navigate("/"); }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all hover:bg-gray-100"
-          style={{ color: "#6c6c6c", justifyContent: collapsed ? "center" : "flex-start" }}>
+        <button onClick={() => { logout(); navigate("/"); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all hover:bg-gray-100" style={{ color: "#6c6c6c", justifyContent: collapsed ? "center" : "flex-start" }}>
           <LogOut size={18} />
           {!collapsed && <span>Logout</span>}
         </button>
@@ -126,11 +173,7 @@ function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; se
 function StatCard({ title, value, icon, color, subtext }: { title: string; value: string | number; icon: React.ReactNode; color: string; subtext?: string }) {
   return (
     <div className="dashboard-card p-5">
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `${color}15` }}>
-          <div style={{ color }}>{icon}</div>
-        </div>
-      </div>
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style={{ background: `${color}15`, color }}>{icon}</div>
       <p className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>{value}</p>
       <p className="text-xs mt-1" style={{ color: "#6c6c6c" }}>{title}</p>
       {subtext && <p className="text-xs mt-1" style={{ color: "#0071e3" }}>{subtext}</p>}
@@ -138,32 +181,27 @@ function StatCard({ title, value, icon, color, subtext }: { title: string; value
   );
 }
 
-// Dashboard Home
-function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) {
-  const { user } = useAuth();
-  const displayName = user?.name || "Candidate";
-  const [recommendations, setRecommendations] = useState<JobRecommendation[]>(fallbackJobRecommendations);
+function EmptyState({ icon, title, message }: { icon: React.ReactNode; title: string; message: string }) {
+  return (
+    <div className="dashboard-card text-center py-12">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: "#f4f4f4", color: "#9ca3af" }}>{icon}</div>
+      <p className="text-base font-medium" style={{ color: "#0a0a0c" }}>{title}</p>
+      <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{message}</p>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    recommendJobs("0", 3)
-      .then((result) => {
-        if (!cancelled && result.recommendations.length > 0) {
-          setRecommendations(result.recommendations);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setRecommendations(fallbackJobRecommendations());
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+function DashboardHome({ candidate, applications, interviews, notifications, setActiveTab }: { candidate: Candidate | null; applications: Application[]; interviews: Interview[]; notifications: Notification[]; setActiveTab: (t: string) => void }) {
+  const displayName = candidate?.name || "Candidate";
+  const completion = Math.round((profileFields.filter((field) => {
+    const value = candidate?.[field];
+    return Array.isArray(value) ? value.length > 0 : Boolean(value);
+  }).length / profileFields.length) * 100);
+  const scheduledInterviews = interviews.filter((item) => item.status === "scheduled").length;
+  const unreadNotifications = notifications.filter((item) => item.status !== "read").length;
 
   return (
     <div className="space-y-6">
-      {/* Welcome Banner */}
       <div className="dashboard-card" style={{ background: "#0a0a0c" }}>
         <div className="flex items-start gap-4">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#d4af3720" }}>
@@ -171,30 +209,23 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
           </div>
           <div>
             <h2 className="text-lg font-semibold" style={{ color: "#f2f0e6" }}>Welcome to Skillora, {displayName}!</h2>
-            <p className="text-sm mt-1" style={{ color: "#c3c0b4" }}>
-              We are excited to help you discover opportunities, improve your skills, and advance your career.
-            </p>
+            <p className="text-sm mt-1" style={{ color: "#c3c0b4" }}>Your dashboard is connected to your MongoDB candidate profile.</p>
             <div className="mt-3 p-3 rounded-lg" style={{ background: "rgba(212, 175, 55, 0.1)", border: "1px solid rgba(212, 175, 55, 0.2)" }}>
               <div className="flex items-start gap-2">
                 <AlertTriangle size={14} style={{ color: "#d4af37" }} className="flex-shrink-0 mt-0.5" />
-                <p className="text-xs" style={{ color: "#c3c0b4" }}>
-                  <strong style={{ color: "#d4af37" }}>Safety Notice:</strong> Skillora never supports illegal payments for jobs. If any recruiter asks for money, immediately report them with screenshots and evidence.
-                </p>
+                <p className="text-xs" style={{ color: "#c3c0b4" }}><strong style={{ color: "#d4af37" }}>Safety Notice:</strong> Skillora never supports illegal payments for jobs.</p>
               </div>
             </div>
           </div>
         </div>
       </div>
-
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="ATS Score" value={`${candidateStats.atsScore}%`} icon={<Star size={20} />} color="#f5a623" subtext="Good score!" />
-        <StatCard title="Jobs Applied" value={candidateStats.jobsApplied} icon={<Briefcase size={20} />} color="#0071e3" />
-        <StatCard title="Interviews" value={candidateStats.interviewsScheduled} icon={<Calendar size={20} />} color="#3dc75a" />
-        <StatCard title="Profile Completion" value={`${candidateStats.profileCompletion}%`} icon={<CheckCircle size={20} />} color="#9b59b6" />
-        <StatCard title="AI Career Match" value={`${candidateStats.aiCareerMatch}%`} icon={<Brain size={20} />} color="#e74c3c" subtext="Excellent match!" />
+        <StatCard title="ATS Score" value={`${candidate?.atsScore || 0}%`} icon={<Star size={20} />} color="#f5a623" />
+        <StatCard title="Jobs Applied" value={applications.length} icon={<Briefcase size={20} />} color="#0071e3" />
+        <StatCard title="Interviews" value={scheduledInterviews} icon={<Calendar size={20} />} color="#3dc75a" />
+        <StatCard title="Profile Completion" value={`${completion}%`} icon={<CheckCircle size={20} />} color="#9b59b6" />
+        <StatCard title="Unread Notifications" value={unreadNotifications} icon={<Bell size={20} />} color="#e74c3c" />
       </div>
-
-      {/* Quick Actions */}
       <div className="dashboard-card">
         <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Quick Actions</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -204,38 +235,10 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
             { label: "Update Profile", icon: <Settings size={18} />, action: () => setActiveTab("settings"), color: "#f5a623" },
             { label: "AI Recommendations", icon: <Star size={18} />, action: () => setActiveTab("recommendations"), color: "#9b59b6" },
           ].map((action) => (
-            <button key={action.label} onClick={action.action}
-              className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all hover:scale-105"
-              style={{ background: `${action.color}10`, border: `1px solid ${action.color}20` }}>
+            <button key={action.label} onClick={action.action} className="flex flex-col items-center gap-2 p-4 rounded-xl transition-all hover:scale-105" style={{ background: `${action.color}10`, border: `1px solid ${action.color}20` }}>
               <div style={{ color: action.color }}>{action.icon}</div>
               <span className="text-xs font-medium" style={{ color: "#0a0a0c" }}>{action.label}</span>
             </button>
-          ))}
-        </div>
-      </div>
-
-      {/* AI Recommendations Preview */}
-      <div className="dashboard-card">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>Recommended for You</h3>
-          <button onClick={() => setActiveTab("recommendations")} className="text-xs font-medium flex items-center gap-1" style={{ color: "#0071e3" }}>
-            View All <ChevronRight size={14} />
-          </button>
-        </div>
-        <div className="space-y-3">
-          {recommendations.slice(0, 3).map((rec) => (
-            <div key={rec.jobId} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
-              <div>
-                <h4 className="text-sm font-semibold" style={{ color: "#0a0a0c" }}>{rec.title}</h4>
-                <p className="text-xs" style={{ color: "#6c6c6c" }}>{rec.company}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: "#e8f0fe", color: "#0071e3" }}>
-                  {rec.matchScore}% match
-                </span>
-                <button className="px-3 py-1 rounded-lg text-xs font-medium" style={{ background: "#0071e3", color: "white" }}>Apply</button>
-              </div>
-            </div>
           ))}
         </div>
       </div>
@@ -243,155 +246,88 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
   );
 }
 
-// Resume Analyzer
-function ResumeAnalyzer() {
+function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; refresh: () => Promise<void> }) {
   const [uploaded, setUploaded] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<ResumeScoreResult | null>(null);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUpload = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-
+    if (!file || !candidateKey(candidate)) return;
     setAnalyzing(true);
     setError("");
-
     try {
-      const fileText = file.type.startsWith("text/")
-        ? await file.text()
-        : `${file.name} Python React SQL machine learning GitHub projects bachelor degree 3 years experience`;
+      if (!file.type.startsWith("text/") && !file.name.toLowerCase().endsWith(".txt")) {
+        throw new Error("Only text resumes can be analyzed until server-side PDF/DOCX extraction is configured.");
+      }
+      const fileText = await file.text();
+      if (!fileText.trim()) throw new Error("The uploaded resume did not contain extractable text.");
       const result = await scoreResume(fileText);
+      await apiRequest(`/candidates/${candidateKey(candidate)}/resumes`, {
+        method: "POST",
+        body: JSON.stringify({
+          originalFileName: file.name,
+          contentType: file.type || "text/plain",
+          fileSize: file.size,
+          extractedText: fileText,
+          parsedSkills: result.strengths,
+          atsScore: result.atsScore,
+          analysis: result,
+          recommendations: result.suggestions,
+          processed: true,
+        }),
+      });
       setAnalysis(result);
-      setAnalyzing(false);
       setUploaded(true);
-    } catch {
+      await refresh();
+    } catch (caught) {
       setAnalysis(null);
-      setError("AI scoring is unavailable right now. Showing the saved sample score.");
+      setError(caught instanceof Error ? caught.message : "Resume analysis failed.");
+    } finally {
       setAnalyzing(false);
-      setUploaded(true);
+      event.target.value = "";
     }
   };
 
-  const atsScore = analysis?.atsScore ?? candidateStats.atsScore;
-  const strengths = analysis?.strengths.length ? analysis.strengths.map((skill) => skill.replace(/\b\w/g, (letter) => letter.toUpperCase())) : ["Python", "SQL", "Machine Learning", "React", "Data Analysis"];
-  const suggestions = analysis?.suggestions.length ? analysis.suggestions : [
-    "Add measurable achievements with numbers (e.g., 'Increased efficiency by 30%')",
-    "Include relevant certifications (AWS, Azure, etc.)",
-    "Use more technical keywords from job descriptions",
-    "Expand your project descriptions with technologies used",
-    "Add a summary section highlighting your key strengths",
-  ];
+  const atsScore = analysis?.atsScore ?? candidate?.atsScore ?? 0;
+  const strengths = analysis?.strengths || candidate?.skills || [];
+  const suggestions = analysis?.suggestions || [];
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Resume Analyzer</h1>
-
-      {!uploaded ? (
-        <div className="dashboard-card">
-          <div
-            onClick={handleUpload}
-            className="border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all hover:border-blue-400"
-            style={{ borderColor: "#e5e5e5" }}
-          >
-            <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" className="hidden" onChange={handleFileChange} />
-            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#e8f0fe" }}>
-              <Upload size={28} style={{ color: "#0071e3" }} />
-            </div>
-            <h3 className="text-lg font-semibold mb-2" style={{ color: "#0a0a0c" }}>
-              {analyzing ? "Analyzing your resume..." : "Upload your Resume"}
-            </h3>
-            <p className="text-sm" style={{ color: "#6c6c6c" }}>
-              {analyzing ? "Our AI is scanning your skills and experience..." : "Drag & drop or click to upload PDF, DOC, DOCX"}
-            </p>
-            {analyzing && (
-              <div className="mt-4 w-48 h-2 rounded-full mx-auto overflow-hidden" style={{ background: "#f4f4f4" }}>
-                <div className="h-full rounded-full animate-pulse" style={{ width: "70%", background: "#0071e3" }} />
-              </div>
-            )}
+      <div className="dashboard-card">
+        <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all hover:border-blue-400" style={{ borderColor: "#e5e5e5" }}>
+          <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden" onChange={handleFileChange} />
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#e8f0fe" }}>
+            <Upload size={28} style={{ color: "#0071e3" }} />
           </div>
+          <h3 className="text-lg font-semibold mb-2" style={{ color: "#0a0a0c" }}>{analyzing ? "Analyzing your resume..." : "Upload a text resume"}</h3>
+          <p className="text-sm" style={{ color: "#6c6c6c" }}>ATS scoring uses the trained ML endpoint and stores the result in MongoDB.</p>
         </div>
-      ) : (
+        {error && <p className="text-sm mt-3" style={{ color: "#b91c1c" }}>{error}</p>}
+      </div>
+      {(uploaded || atsScore > 0) && (
         <>
-          {/* ATS Score */}
           <div className="dashboard-card text-center">
             <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Your ATS Score</h3>
-            <div className="w-32 h-32 rounded-full flex items-center justify-center mx-auto relative"
-              style={{ background: `conic-gradient(#0071e3 ${atsScore * 3.6}deg, #f4f4f4 0deg)` }}>
+            <div className="w-32 h-32 rounded-full flex items-center justify-center mx-auto" style={{ background: `conic-gradient(#0071e3 ${atsScore * 3.6}deg, #f4f4f4 0deg)` }}>
               <div className="w-24 h-24 rounded-full flex items-center justify-center" style={{ background: "white" }}>
                 <span className="text-3xl font-bold" style={{ color: "#0071e3" }}>{atsScore}%</span>
               </div>
             </div>
-            <p className="text-sm mt-3" style={{ color: atsScore >= 70 ? "#3dc75a" : "#856404" }}>
-              {analysis ? `${analysis.recommendation}${analysis.classification ? ` | ${analysis.classification}` : ""}` : "Sample score shown."}
-            </p>
-            {error && <p className="text-xs mt-2" style={{ color: "#856404" }}>{error}</p>}
+            <p className="text-sm mt-3" style={{ color: atsScore >= 70 ? "#3dc75a" : "#856404" }}>{analysis?.recommendation || "Latest saved ATS score from MongoDB."}</p>
           </div>
-
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Strengths */}
             <div className="dashboard-card">
-              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}>
-                <CheckCircle size={18} style={{ color: "#3dc75a" }} /> Strengths
-              </h3>
-              <div className="space-y-3">
-                {strengths.map((skill) => (
-                  <div key={skill} className="flex items-center gap-3">
-                    <CheckCircle size={16} style={{ color: "#3dc75a" }} />
-                    <span className="text-sm" style={{ color: "#0a0a0c" }}>{skill}</span>
-                  </div>
-                ))}
-              </div>
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><CheckCircle size={18} style={{ color: "#3dc75a" }} /> Extracted Skills</h3>
+              {strengths.length ? strengths.map((skill) => <p key={skill} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{skill}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No skills extracted yet.</p>}
             </div>
-
-            {/* Missing Skills */}
             <div className="dashboard-card">
-              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}>
-                <XCircle size={18} style={{ color: "#e74c3c" }} /> Missing Keywords
-              </h3>
-              <div className="space-y-3">
-                {(analysis?.breakdown.skillsMatch && analysis.breakdown.skillsMatch >= 80 ? [
-                  { skill: "Role Keywords", suggestion: "Add more target-job language for better matching" },
-                  { skill: "Quantified Results", suggestion: "Mention measurable impact for projects" },
-                  { skill: "Certifications", suggestion: "Add relevant certifications if available" },
-                ] : [
-                  { skill: "Docker", suggestion: "Add Docker to your skills" },
-                  { skill: "AWS", suggestion: "Include cloud platform experience" },
-                  { skill: "GraphQL", suggestion: "Mention any API experience" },
-                ]).map((item) => (
-                  <div key={item.skill} className="flex items-start gap-3">
-                    <XCircle size={16} style={{ color: "#e74c3c" }} className="flex-shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-sm font-medium" style={{ color: "#0a0a0c" }}>{item.skill}</span>
-                      <p className="text-xs" style={{ color: "#6c6c6c" }}>{item.suggestion}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Suggestions */}
-          <div className="dashboard-card">
-            <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}>
-              <Zap size={18} style={{ color: "#f5a623" }} /> Improvement Suggestions
-            </h3>
-            <div className="space-y-3">
-              {suggestions.map((suggestion, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-lg" style={{ background: "#f4f4f4" }}>
-                  <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0" style={{ background: "#0071e3", color: "white" }}>
-                    {i + 1}
-                  </span>
-                  <p className="text-sm" style={{ color: "#0a0a0c" }}>{suggestion}</p>
-                </div>
-              ))}
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><Zap size={18} style={{ color: "#f5a623" }} /> Recommendations</h3>
+              {suggestions.length ? suggestions.map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>Upload a resume to generate recommendations.</p>}
             </div>
           </div>
         </>
@@ -400,116 +336,161 @@ function ResumeAnalyzer() {
   );
 }
 
-// Job Search
-function JobSearch() {
-  const { user } = useAuth();
-  const currentCandidate = mockCandidates.find((candidate) => candidate.email === user?.email) || mockCandidates[0];
-  const candidateId = currentCandidate?.id || user?.id || "candidate";
+function JobSearch({ candidate, applications, refresh }: { candidate: Candidate | null; applications: Application[]; refresh: () => Promise<void> }) {
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters] = useState({ location: "", type: "", experience: "" });
-  const [appliedJobIds, setAppliedJobIds] = useState(() => new Set(mockApplications.filter((app) => app.candidateId === candidateId).map((app) => app.jobId)));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const appliedJobIds = useMemo(() => new Set(applications.map((app) => typeof app.jobId === "object" ? jobKey(app.jobId) : app.jobId).filter(Boolean) as string[]), [applications]);
 
-  const filtered = mockJobs.filter((job) => {
-    const matchSearch = job.title.toLowerCase().includes(search.toLowerCase()) || job.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
-    const matchLoc = !filters.location || job.location.toLowerCase().includes(filters.location.toLowerCase());
-    const matchType = !filters.type || job.type === filters.type;
-    const matchExp = !filters.experience || job.experience === filters.experience;
-    return matchSearch && matchLoc && matchType && matchExp;
-  });
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 350);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (filters.location) params.set("location", filters.location);
+    if (filters.type) params.set("jobType", filters.type);
+    if (filters.experience) params.set("experienceLevel", filters.experience);
+    setLoading(true);
+    setError("");
+    apiRequest<Job[]>(`/jobs?${params.toString()}`)
+      .then(setJobs)
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load jobs."))
+      .finally(() => setLoading(false));
+  }, [debouncedSearch, filters]);
+
+  const apply = async (job: Job) => {
+    if (!candidateKey(candidate)) return setError("Candidate profile is required before applying.");
+    try {
+      await apiRequest("/applications", {
+        method: "POST",
+        body: JSON.stringify({ jobId: jobKey(job), candidateId: candidateKey(candidate), score: candidate?.atsScore || 0 }),
+      });
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to submit application.");
+    }
+  };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Job Search</h1>
-
-      <div className="dashboard-card space-y-4">
-        <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "#6c6c6c" }} />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by job title, skills, company..."
-            className="w-full pl-10 pr-4 py-3 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+      <div className="dashboard-card">
+        <div className="grid md:grid-cols-4 gap-3">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, company, skill" className="px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <input value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })} placeholder="Location" className="px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <input value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })} placeholder="Job type" className="px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <input value={filters.experience} onChange={(e) => setFilters({ ...filters, experience: e.target.value })} placeholder="Experience" className="px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
         </div>
-        <div className="grid md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Location</label>
-            <input value={filters.location} onChange={(e) => setFilters({ ...filters, location: e.target.value })}
-              placeholder="Any location" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Job Type</label>
-            <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }}>
-              <option value="">All Types</option>
-              <option>Remote</option>
-              <option>Hybrid</option>
-              <option>On-site</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Experience</label>
-            <select value={filters.experience} onChange={(e) => setFilters({ ...filters, experience: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }}>
-              <option value="">Any Experience</option>
-              <option>Fresher</option>
-              <option>1-2 years</option>
-              <option>2-4 years</option>
-              <option>3-5 years</option>
-            </select>
-          </div>
-        </div>
+        {error && <p className="text-sm mt-3" style={{ color: "#b91c1c" }}>{error}</p>}
       </div>
-
-      <div className="space-y-4">
-        {filtered.map((job) => (
-          <div key={job.id} className="dashboard-card">
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{job.title}</h3>
-                <p className="text-sm" style={{ color: "#6c6c6c" }}>{job.company}</p>
+      {loading ? <p className="text-sm" style={{ color: "#6c6c6c" }}>Loading jobs...</p> : jobs.length === 0 ? <EmptyState icon={<Search size={24} />} title="No matching jobs" message="MongoDB returned no jobs for the current filters." /> : (
+        <div className="grid gap-4">
+          {jobs.map((job) => {
+            const id = jobKey(job);
+            const applied = appliedJobIds.has(id);
+            return (
+              <div key={id} className="dashboard-card">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{job.title}</h3>
+                    <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{job.company || "Company not listed"} | {job.location || "Location not listed"}</p>
+                    <div className="flex flex-wrap gap-2 mt-3">{jobSkills(job).map((skill) => <span key={skill} className="px-2 py-1 rounded-full text-xs" style={{ background: "#e8f0fe", color: "#0071e3" }}>{skill}</span>)}</div>
+                  </div>
+                  <button disabled={applied} onClick={() => apply(job)} className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60" style={{ background: applied ? "#9ca3af" : "#0071e3", color: "white" }}>{applied ? "Applied" : "Apply"}</button>
+                </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: "#e8f0fe", color: "#0071e3" }}>{job.type}</span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AIRecommendations({ candidate }: { candidate: Candidate | null }) {
+  const [recommendations, setRecommendations] = useState<JobRecommendation[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    recommendJobs(candidateKey(candidate) || "0", 10)
+      .then((result) => setRecommendations(result.recommendations || []))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load recommendations."));
+  }, [candidate]);
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>AI Job Recommendations</h1>
+      {error && <p className="text-sm" style={{ color: "#b91c1c" }}>{error}</p>}
+      {recommendations.length === 0 ? <EmptyState icon={<Brain size={24} />} title="No recommendations" message="The ML service returned no MongoDB job recommendations." /> : recommendations.map((rec) => (
+        <div key={rec.jobId} className="dashboard-card">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{rec.title}</h3>
+              <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{rec.company} | {rec.location}</p>
+              <p className="text-sm mt-3" style={{ color: "#0a0a0c" }}>{rec.reason}</p>
             </div>
-            <div className="flex flex-wrap gap-4 text-xs mb-3" style={{ color: "#6c6c6c" }}>
-              <span className="flex items-center gap-1"><MapPin size={12} /> {job.location}</span>
-              <span className="flex items-center gap-1"><DollarSign size={12} /> {job.salary}</span>
-              <span className="flex items-center gap-1"><Briefcase size={12} /> {job.experience}</span>
-              <span className="flex items-center gap-1"><Clock size={12} /> Deadline: {job.deadline}</span>
+            <span className="px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "#e8f0fe", color: "#0071e3" }}>{rec.matchScore}%</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MyApplications({ applications }: { applications: Application[] }) {
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>My Applications</h1>
+      {applications.length === 0 ? <EmptyState icon={<Briefcase size={24} />} title="No applications yet" message="Applications will appear after MongoDB stores them." /> : applications.map((app) => {
+        const job = typeof app.jobId === "object" ? app.jobId : null;
+        return (
+          <div key={app._id || app.id} className="dashboard-card">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{app.jobTitle || job?.title || "Job"}</h3>
+                <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{app.company || job?.company || "Company not listed"}</p>
+                <p className="text-xs mt-2" style={{ color: "#6c6c6c" }}>Applied: {app.appliedDate || formatDate(app.appliedAt)}</p>
+              </div>
+              <div className="text-right">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: "#e8f0fe", color: "#0071e3" }}>{statusLabel(app.status)}</span>
+                <p className="text-xs mt-2" style={{ color: "#6c6c6c" }}>ATS {app.atsScore || app.score || 0}%</p>
+              </div>
             </div>
-            <p className="text-sm mb-3" style={{ color: "#6c6c6c" }}>{job.description}</p>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {job.skills.map((skill) => (
-                <span key={skill} className="px-2 py-0.5 rounded-full text-xs" style={{ background: "#f4f4f4", color: "#6c6c6c" }}>{skill}</span>
-              ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function InterviewCenter({ interviews }: { interviews: Interview[] }) {
+  const upcoming = interviews.filter((item) => item.status === "scheduled");
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Interview Center</h1>
+      <div className="dashboard-card">
+        <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Upcoming Interviews</h3>
+        {upcoming.length === 0 ? <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No upcoming interviews scheduled.</p> : upcoming.map((item) => (
+          <div key={item._id || item.id} className="flex items-center gap-4 p-4 rounded-xl mb-3" style={{ background: "#e8f0fe" }}>
+            <Calendar size={20} style={{ color: "#0071e3" }} />
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold" style={{ color: "#0a0a0c" }}>{item.jobTitle || "Interview"}</h4>
+              <p className="text-xs" style={{ color: "#6c6c6c" }}>{item.date || formatDate(item.scheduledAt)} {item.time || ""}</p>
             </div>
-            <button
-              disabled={appliedJobIds.has(job.id)}
-              onClick={async () => {
-                const application = {
-                  id: `app-${Date.now()}`,
-                  candidateId,
-                  candidateName: currentCandidate?.name || user?.name || "Candidate",
-                  jobId: job.id,
-                  jobTitle: job.title,
-                  company: job.company,
-                  atsScore: candidateStats.atsScore,
-                  status: "applied",
-                  appliedDate: new Date().toISOString().slice(0, 10),
-                  resumeUrl: currentCandidate?.resumeUrl || "",
-                };
-                try {
-                  await apiRequest("/platform/applications", {
-                    method: "POST",
-                    body: JSON.stringify(application),
-                  });
-                } catch {
-                  // Keep the optimistic UI state when offline.
-                }
-                setAppliedJobIds(new Set([...appliedJobIds, job.id]));
-              }}
-              className="px-6 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
-              style={{ background: appliedJobIds.has(job.id) ? "#d4edda" : "#0071e3", color: appliedJobIds.has(job.id) ? "#155724" : "white" }}
-            >
-              {appliedJobIds.has(job.id) ? "Applied" : "Apply Now"}
-            </button>
+            {item.meetingLink && <a href={item.meetingLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-4 py-2 rounded-lg text-xs font-medium" style={{ background: "#0071e3", color: "white" }}><ExternalLink size={12} /> Join</a>}
+          </div>
+        ))}
+      </div>
+      <div className="dashboard-card">
+        <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Interview History</h3>
+        {interviews.length === 0 ? <p className="text-sm" style={{ color: "#6c6c6c" }}>No interviews found in MongoDB.</p> : interviews.map((item) => (
+          <div key={item._id || item.id} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid #f4f4f4" }}>
+            <span className="text-sm font-medium" style={{ color: "#0a0a0c" }}>{item.jobTitle || "Interview"}</span>
+            <span className="text-xs" style={{ color: "#6c6c6c" }}>{statusLabel(item.status)} | {item.feedback || "Feedback pending"}</span>
           </div>
         ))}
       </div>
@@ -517,491 +498,223 @@ function JobSearch() {
   );
 }
 
-// AI Recommendations
-function AIRecommendations() {
-  const [recommendations, setRecommendations] = useState<JobRecommendation[]>(fallbackJobRecommendations);
-  const [loading, setLoading] = useState(true);
-
+function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
+  const [gap, setGap] = useState<SkillGapResult | null>(null);
+  const [error, setError] = useState("");
   useEffect(() => {
-    let cancelled = false;
-    recommendJobs("0", 5)
-      .then((result) => {
-        if (!cancelled && result.recommendations.length > 0) {
-          setRecommendations(result.recommendations);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setRecommendations(fallbackJobRecommendations());
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>AI Job Recommendations</h1>
-          <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{loading ? "Loading trained ML recommendations..." : "Personalized job matches from trained CV/job embeddings"}</p>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        {recommendations.map((rec, idx) => {
-          const localJob = mockJobs.find((j) => j.id === rec.jobId);
-          const skills = localJob?.skills || [rec.industry].filter(Boolean);
-          return (
-            <div key={rec.jobId} className="dashboard-card">
-              <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: idx === 0 ? "#d4edda" : idx === 1 ? "#e8f0fe" : "#fff3cd" }}>
-                  <span className="text-xl font-bold" style={{ color: idx === 0 ? "#155724" : idx === 1 ? "#0071e3" : "#856404" }}>#{idx + 1}</span>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{rec.title}</h3>
-                      <p className="text-sm" style={{ color: "#6c6c6c" }}>{rec.company} | {rec.location || localJob?.location || "Flexible"}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="w-16 h-16 rounded-full flex items-center justify-center relative"
-                        style={{ background: `conic-gradient(#0071e3 ${rec.matchScore * 3.6}deg, #f4f4f4 0deg)` }}>
-                        <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "white" }}>
-                          <span className="text-sm font-bold" style={{ color: "#0071e3" }}>{rec.matchScore}%</span>
-                        </div>
-                      </div>
-                      <p className="text-xs mt-1" style={{ color: "#6c6c6c" }}>Match Score</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-4 text-xs mt-3" style={{ color: "#6c6c6c" }}>
-                    <span className="flex items-center gap-1"><MapPin size={12} /> {rec.location || localJob?.type || "Flexible"}</span>
-                    <span className="flex items-center gap-1"><DollarSign size={12} /> {localJob?.salary || "Market aligned"}</span>
-                    <span className="flex items-center gap-1"><Briefcase size={12} /> {rec.industry || localJob?.experience || "Profile match"}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {skills.map((skill) => (
-                      <span key={skill} className="px-2 py-0.5 rounded-full text-xs" style={{ background: "#e8f0fe", color: "#0071e3" }}>{skill}</span>
-                    ))}
-                  </div>
-                  <p className="text-xs mt-3" style={{ color: "#6c6c6c" }}>{rec.reason}</p>
-                  <div className="mt-4">
-                    <button className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0071e3", color: "white" }}>Apply Now</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// My Applications
-function MyApplications() {
-  const statusFlow = ["applied", "under_review", "shortlisted", "interview", "selected"];
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>My Applications</h1>
-
-      <div className="space-y-4">
-        {mockApplications.filter((a) => a.candidateId === "cand-1").map((app) => {
-          const currentIdx = statusFlow.indexOf(app.status);
-          return (
-            <div key={app.id} className="dashboard-card">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{app.jobTitle}</h3>
-                  <p className="text-sm" style={{ color: "#6c6c6c" }}>{app.company}</p>
-                </div>
-                <span className={`status-badge status-${app.status}`}>{app.status.replace("_", " ")}</span>
-              </div>
-
-              {/* Progress Tracker */}
-              <div className="flex items-center gap-1 mb-4">
-                {statusFlow.map((s, i) => (
-                  <div key={s} className="flex-1 flex items-center gap-1">
-                    <div className="flex-1 h-2 rounded-full" style={{ background: i <= currentIdx ? "#0071e3" : "#f4f4f4" }} />
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between text-xs mb-4" style={{ color: "#6c6c6c" }}>
-                <span>Applied</span>
-                <span>Under Review</span>
-                <span>Shortlisted</span>
-                <span>Interview</span>
-                <span>Selected</span>
-              </div>
-
-              <div className="flex items-center justify-between text-xs" style={{ color: "#6c6c6c" }}>
-                <span>Applied on: {app.appliedDate}</span>
-                <span>ATS Score: <strong style={{ color: "#0071e3" }}>{app.atsScore}%</strong></span>
-              </div>
-            </div>
-          );
-        })}
-
-        {mockApplications.filter((a) => a.candidateId === "cand-1").length === 0 && (
-          <div className="dashboard-card text-center py-12">
-            <Briefcase size={48} className="mx-auto mb-4" style={{ color: "#e5e5e5" }} />
-            <p className="text-lg font-medium" style={{ color: "#0a0a0c" }}>No applications yet</p>
-            <p className="text-sm" style={{ color: "#6c6c6c" }}>Start applying to jobs to track your progress here.</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Interview Center
-function InterviewCenter() {
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Interview Center</h1>
-
-      {/* Upcoming Interviews */}
-      <div className="dashboard-card">
-        <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Upcoming Interviews</h3>
-        {mockInterviews.filter((i) => i.candidateId === "cand-1" && i.status === "scheduled").length === 0 ? (
-          <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No upcoming interviews scheduled.</p>
-        ) : (
-          <div className="space-y-4">
-            {mockInterviews.filter((i) => i.candidateId === "cand-1" && i.status === "scheduled").map((int) => (
-              <div key={int.id} className="flex items-center gap-4 p-4 rounded-xl" style={{ background: "#e8f0fe" }}>
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: "#0071e3" }}>
-                  <Calendar size={20} style={{ color: "white" }} />
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-sm font-semibold" style={{ color: "#0a0a0c" }}>{int.jobTitle}</h4>
-                  <p className="text-xs" style={{ color: "#6c6c6c" }}>{int.date} at {int.time}</p>
-                </div>
-                <a href={int.meetingLink} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center gap-1 px-4 py-2 rounded-lg text-xs font-medium" style={{ background: "#0071e3", color: "white" }}>
-                  <ExternalLink size={12} /> Join
-                </a>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Interview History */}
-      <div className="dashboard-card">
-        <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Interview History</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: "1px solid #e5e5e5" }}>
-                <th className="text-left py-3 px-2 font-medium" style={{ color: "#6c6c6c" }}>Job</th>
-                <th className="text-left py-3 px-2 font-medium" style={{ color: "#6c6c6c" }}>Date</th>
-                <th className="text-left py-3 px-2 font-medium" style={{ color: "#6c6c6c" }}>Status</th>
-                <th className="text-left py-3 px-2 font-medium" style={{ color: "#6c6c6c" }}>Feedback</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockInterviews.filter((i) => i.candidateId === "cand-1").map((int) => (
-                <tr key={int.id} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
-                  <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{int.jobTitle}</td>
-                  <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{int.date}</td>
-                  <td className="py-3 px-2"><span className={`status-badge status-${int.status}`}>{int.status}</span></td>
-                  <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{int.feedback || "Pending"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Skill Gap Analysis
-function SkillGapAnalysis() {
-  const [gap, setGap] = useState<SkillGapResult>(fallbackSkillGapResult);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchSkillGap("0")
-      .then((result) => {
-        if (!cancelled) {
-          const fallback = fallbackSkillGapResult();
-          setGap({
-            ...result,
-            matched: result.matched.length ? result.matched : fallback.matched,
-            missing: result.missing.length ? result.missing : fallback.missing,
-            learningPath: result.learningPath.length ? result.learningPath : fallback.learningPath,
-          });
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setGap(fallbackSkillGapResult());
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
+    fetchSkillGap(candidateKey(candidate) || "0")
+      .then(setGap)
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load skill gap analysis."));
+  }, [candidate]);
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Skill Gap Analysis</h1>
-      <p className="text-sm" style={{ color: "#6c6c6c" }}>
-        {loading ? "Loading trained ML skill analysis..." : `Compared against ${gap.targetJob?.title || "the recommended job"}.`}
-      </p>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Matched Skills */}
-        <div className="dashboard-card">
-          <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}>
-            <CheckCircle size={18} style={{ color: "#3dc75a" }} /> Your Skills
-          </h3>
-          <div className="space-y-4">
-            {gap.matched.map((s) => (
-              <div key={s.skill}>
-                <div className="flex justify-between text-sm mb-1">
-                  <span style={{ color: "#0a0a0c" }}>{s.skill}</span>
-                  <span style={{ color: "#6c6c6c" }}>{s.level}%</span>
-                </div>
-                <div className="w-full h-2 rounded-full" style={{ background: "#f4f4f4" }}>
-                  <div className="h-2 rounded-full" style={{ width: `${s.level}%`, background: "#3dc75a" }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Missing Skills */}
-        <div className="dashboard-card">
-          <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}>
-            <Target size={18} style={{ color: "#e74c3c" }} /> Skills to Learn
-          </h3>
-          <div className="space-y-4">
-            {gap.missing.map((s) => (
-              <div key={s.skill} className="p-3 rounded-lg" style={{ background: "#f8d7da" }}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium" style={{ color: "#721c24" }}>{s.skill}</span>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#f5c6cb", color: "#721c24" }}>Missing</span>
-                </div>
-                <p className="text-xs" style={{ color: "#856404" }}>Recommended: {s.recommended}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Learning Path */}
-      <div className="dashboard-card">
-        <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}>
-          <BookOpen size={18} style={{ color: "#0071e3" }} /> Recommended Learning Path
-        </h3>
-        <div className="space-y-3">
-          {gap.learningPath.map((item) => (
-            <div key={item.step} className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: "#0071e3", color: "white" }}>
-                {item.step}
-              </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-medium" style={{ color: "#0a0a0c" }}>{item.title}</h4>
-                <p className="text-xs" style={{ color: "#6c6c6c" }}>{item.type} | {item.duration}</p>
-              </div>
-              <ChevronRight size={16} style={{ color: "#6c6c6c" }} />
+      {error && <p className="text-sm" style={{ color: "#b91c1c" }}>{error}</p>}
+      {!gap ? <EmptyState icon={<Target size={24} />} title="No skill gap data" message="The ML service did not return skill gap analysis." /> : (
+        <>
+          <p className="text-sm" style={{ color: "#6c6c6c" }}>Compared against {gap.targetJob?.title || "recommended job"}.</p>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><CheckCircle size={18} style={{ color: "#3dc75a" }} /> Existing Skills</h3>
+              {gap.matched.map((skill) => <p key={skill.skill} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{skill.skill} - {skill.level}%</p>)}
             </div>
-          ))}
-        </div>
-      </div>
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><XCircle size={18} style={{ color: "#e74c3c" }} /> Missing Skills</h3>
+              {gap.missing.map((skill) => <p key={skill.skill} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{skill.skill}: {skill.recommended}</p>)}
+            </div>
+          </div>
+          <div className="dashboard-card">
+            <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><BookOpen size={18} style={{ color: "#0071e3" }} /> Improvement Suggestions</h3>
+            {gap.learningPath.map((item) => <p key={item.step} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item.step}. {item.title} ({item.duration})</p>)}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-// Messages
-function Messages() {
-  const [messages, setMessages] = useState(mockMessages);
+function Messages({ candidate }: { candidate: Candidate | null }) {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [reply, setReply] = useState("");
+  const [recipientId, setRecipientId] = useState("");
+  const [error, setError] = useState("");
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reply.trim()) return;
-    const message = {
-      id: `msg-${messages.length + 1}`,
-      senderId: "cand-1",
-      senderName: "You",
-      senderRole: "candidate",
-      recipientId: "rec-1",
-      content: reply,
-      timestamp: new Date().toISOString(),
-      read: true,
-    };
+  const handleSend = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!reply.trim() || !recipientId.trim() || !candidateKey(candidate)) return;
     try {
-      const result = await apiRequest<{ message: typeof message }>("/platform/messages", {
+      const result = await apiRequest<{ message: Message }>("/platform/messages", {
         method: "POST",
-        body: JSON.stringify(message),
+        body: JSON.stringify({
+          senderId: candidateKey(candidate),
+          senderName: candidate?.name || "Candidate",
+          senderRole: "candidate",
+          recipientId,
+          content: reply,
+          read: false,
+        }),
       });
-      setMessages([...messages, result.message]);
-    } catch {
-      setMessages([...messages, message]);
+      setMessages((items) => [...items, result.message]);
+      setReply("");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to send message.");
     }
-    setReply("");
   };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
-
-      <div className="dashboard-card" style={{ minHeight: "400px" }}>
+      <div className="dashboard-card" style={{ minHeight: 400 }}>
+        <input value={recipientId} onChange={(e) => setRecipientId(e.target.value)} placeholder="Recipient user ID" className="w-full mb-4 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
         <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
-          {/* Welcome message */}
-          <div className="flex justify-start">
-            <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl rounded-bl-sm" style={{ background: "#f4f4f4", color: "#0a0a0c" }}>
-              <p className="text-xs font-medium mb-1 opacity-70">Skillora Admin</p>
-              <p className="text-sm">Welcome to Skillora! We are excited to help you discover opportunities, improve your skills, and advance your career.</p>
-            </div>
-          </div>
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.senderRole === "candidate" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-xl ${msg.senderRole === "candidate" ? "rounded-br-sm" : "rounded-bl-sm"}`}
-                style={{ background: msg.senderRole === "candidate" ? "#0071e3" : "#f4f4f4", color: msg.senderRole === "candidate" ? "white" : "#0a0a0c" }}>
+          {messages.length === 0 ? <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No conversation selected from MongoDB yet.</p> : messages.map((msg) => (
+            <div key={msg._id || msg.id} className="flex justify-end">
+              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl rounded-br-sm" style={{ background: "#0071e3", color: "white" }}>
                 <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
                 <p className="text-sm">{msg.content}</p>
               </div>
             </div>
           ))}
         </div>
+        {error && <p className="text-sm mb-3" style={{ color: "#b91c1c" }}>{error}</p>}
         <form onSubmit={handleSend} className="flex gap-2 pt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
-          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Type your message..."
-            className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
-            <Send size={16} />
-          </button>
+          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Type your message" className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}><Send size={16} /></button>
         </form>
       </div>
     </div>
   );
 }
 
-// Notifications
-function NotificationsPage() {
-  const [notifs] = useState(mockNotifications);
-
+function NotificationsPage({ notifications }: { notifications: Notification[] }) {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Notifications</h1>
-
-      <div className="space-y-3">
-        {notifs.map((n) => (
-          <div key={n.id} className="dashboard-card flex items-start gap-4">
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: n.type === "interview" ? "#e8f0fe" : "#d4edda" }}>
-              {n.type === "interview" ? <Calendar size={18} style={{ color: "#0071e3" }} /> : <Briefcase size={18} style={{ color: "#3dc75a" }} />}
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold" style={{ color: "#0a0a0c" }}>{n.title}</h4>
-              <p className="text-xs mt-1" style={{ color: "#6c6c6c" }}>{n.message}</p>
-              <p className="text-xs mt-1" style={{ color: "#0071e3" }}>{n.timestamp}</p>
-            </div>
+      {notifications.length === 0 ? <EmptyState icon={<Bell size={24} />} title="No notifications" message="MongoDB has no notifications for this candidate." /> : notifications.map((item) => (
+        <div key={item._id || item.id} className="dashboard-card flex items-start gap-4">
+          <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: item.type === "interview_invite" ? "#e8f0fe" : "#d4edda" }}>
+            {item.type === "interview_invite" ? <Calendar size={18} style={{ color: "#0071e3" }} /> : <Briefcase size={18} style={{ color: "#3dc75a" }} />}
           </div>
-        ))}
-      </div>
+          <div>
+            <h4 className="text-sm font-semibold" style={{ color: "#0a0a0c" }}>{item.title}</h4>
+            <p className="text-xs mt-1" style={{ color: "#6c6c6c" }}>{item.message}</p>
+            <p className="text-xs mt-1" style={{ color: "#0071e3" }}>{item.timestamp || formatDate(item.createdAt)}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-// Settings
-function SettingsPage() {
-  const { user } = useAuth();
-  const currentCandidate = mockCandidates.find((candidate) => candidate.email === user?.email) || mockCandidates[0];
+function SettingsPage({ candidate, refresh }: { candidate: Candidate | null; refresh: () => Promise<void> }) {
+  const [form, setForm] = useState<Candidate>({});
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => setForm(candidate || {}), [candidate]);
+
+  const update = (field: keyof Candidate, value: string) => setForm((current) => ({ ...current, [field]: value }));
+  const save = async () => {
+    if (!candidateKey(candidate)) return;
+    setMessage("");
+    setError("");
+    try {
+      await apiRequest(`/candidates/${candidateKey(candidate)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          ...form,
+          skills: typeof form.skills === "string" ? String(form.skills).split(",").map((item) => item.trim()).filter(Boolean) : form.skills,
+        }),
+      });
+      setMessage("Profile saved to MongoDB.");
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to save profile.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Profile Settings</h1>
-
       <div className="dashboard-card space-y-4">
         <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>Personal Information</h3>
         <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Full Name</label>
-            <input defaultValue={currentCandidate?.name || user?.name || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Email</label>
-            <input defaultValue={currentCandidate?.email || user?.email || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Phone</label>
-            <input defaultValue={currentCandidate?.phone || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Location</label>
-            <input defaultValue={currentCandidate?.location || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
+          {[
+            ["name", "Full Name"],
+            ["email", "Email"],
+            ["phone", "Phone"],
+            ["location", "Location"],
+            ["college", "College/University"],
+            ["degree", "Degree"],
+            ["specialization", "Specialization"],
+            ["linkedin", "LinkedIn"],
+            ["github", "GitHub"],
+            ["experienceLevel", "Experience Level"],
+          ].map(([field, label]) => (
+            <label key={field} className="block text-xs font-medium" style={{ color: "#6c6c6c" }}>
+              {label}
+              <input value={String(form[field as keyof Candidate] || "")} onChange={(e) => update(field as keyof Candidate, e.target.value)} className="mt-1 w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5", color: "#0a0a0c" }} />
+            </label>
+          ))}
+          <label className="block text-xs font-medium md:col-span-2" style={{ color: "#6c6c6c" }}>
+            Skills
+            <input value={(form.skills || []).join(", ")} onChange={(e) => setForm((current) => ({ ...current, skills: e.target.value.split(",").map((item) => item.trim()) }))} className="mt-1 w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5", color: "#0a0a0c" }} />
+          </label>
         </div>
-        <button className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>Save Changes</button>
-      </div>
-
-      <div className="dashboard-card space-y-4">
-        <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>Education</h3>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>College/University</label>
-            <input defaultValue={currentCandidate?.college || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Degree</label>
-            <input defaultValue={currentCandidate?.degree || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Specialization</label>
-            <input defaultValue={currentCandidate?.specialization || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>CGPA</label>
-            <input defaultValue={currentCandidate?.cgpa || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-        </div>
-      </div>
-
-      <div className="dashboard-card space-y-4">
-        <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>Links</h3>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>LinkedIn</label>
-            <input defaultValue={currentCandidate?.linkedin || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>GitHub</label>
-            <input defaultValue={currentCandidate?.github || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          </div>
-        </div>
+        {message && <p className="text-sm" style={{ color: "#15803d" }}>{message}</p>}
+        {error && <p className="text-sm" style={{ color: "#b91c1c" }}>{error}</p>}
+        <button onClick={save} className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>Save Changes</button>
       </div>
     </div>
   );
 }
 
-// Main Candidate Dashboard
 export default function CandidateDashboard() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [candidate, setCandidate] = useState<Candidate | null>(null);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loadError, setLoadError] = useState("");
+
+  const refresh = async () => {
+    setLoadError("");
+    try {
+      const current = await apiRequest<Candidate>("/candidates/me/profile");
+      setCandidate(current);
+      const id = candidateKey(current);
+      const userId = current.userId || user?.id || id;
+      const [apps, ints, notifs] = await Promise.all([
+        apiRequest<Application[]>(`/applications?candidateId=${id}`),
+        apiRequest<Interview[]>(`/interviews?candidateId=${id}`),
+        apiRequest<Notification[]>(`/notifications?userId=${userId}`),
+      ]);
+      setApplications(apps);
+      setInterviews(ints);
+      setNotifications(notifs);
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Unable to load candidate data.");
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
 
   const renderContent = () => {
     switch (activeTab) {
-      case "dashboard": return <DashboardHome setActiveTab={setActiveTab} />;
-      case "resume": return <ResumeAnalyzer />;
-      case "jobs": return <JobSearch />;
-      case "recommendations": return <AIRecommendations />;
-      case "applications": return <MyApplications />;
-      case "interviews": return <InterviewCenter />;
-      case "skillgap": return <SkillGapAnalysis />;
-      case "messages": return <Messages />;
-      case "notifications": return <NotificationsPage />;
-      case "settings": return <SettingsPage />;
-      default: return <DashboardHome setActiveTab={setActiveTab} />;
+      case "dashboard": return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
+      case "resume": return <ResumeAnalyzer candidate={candidate} refresh={refresh} />;
+      case "jobs": return <JobSearch candidate={candidate} applications={applications} refresh={refresh} />;
+      case "recommendations": return <AIRecommendations candidate={candidate} />;
+      case "applications": return <MyApplications applications={applications} />;
+      case "interviews": return <InterviewCenter interviews={interviews} />;
+      case "skillgap": return <SkillGapAnalysis candidate={candidate} />;
+      case "messages": return <Messages candidate={candidate} />;
+      case "notifications": return <NotificationsPage notifications={notifications} />;
+      case "settings": return <SettingsPage candidate={candidate} refresh={refresh} />;
+      default: return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
     }
   };
 
@@ -1019,15 +732,16 @@ export default function CandidateDashboard() {
           <div className="flex items-center gap-4">
             <button onClick={() => setActiveTab("notifications")} className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <Bell size={18} style={{ color: "#6c6c6c" }} />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: "#e74c3c" }} />
+              {notifications.some((item) => item.status !== "read") && <span className="absolute top-1 right-1 w-2 h-2 rounded-full" style={{ background: "#e74c3c" }} />}
             </button>
             <div className="flex items-center gap-2">
-              <img src="/images/candidate-1.jpg" alt="Profile" className="w-8 h-8 rounded-full object-cover" />
-              <span className="text-sm font-medium hidden md:block" style={{ color: "#0a0a0c" }}>{user?.name || "Candidate"}</span>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "#0a0a0c", color: "#d4af37" }}>{(candidate?.name || user?.name || "C").slice(0, 1)}</div>
+              <span className="text-sm font-medium hidden md:block" style={{ color: "#0a0a0c" }}>{candidate?.name || user?.name || "Candidate"}</span>
             </div>
           </div>
         </header>
         <main className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+          {loadError && <div className="dashboard-card mb-6 text-sm" style={{ color: "#b91c1c" }}>{loadError}</div>}
           {renderContent()}
         </main>
       </div>
