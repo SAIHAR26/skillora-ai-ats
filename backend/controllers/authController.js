@@ -128,6 +128,10 @@ const login = asyncHandler(async (req, res) => {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
+  if (user.role === "recruiter" && user.status === "pending") {
+    return res.status(403).json({ message: "Recruiter account is pending approval" });
+  }
+
   if (["blocked", "suspended", "rejected"].includes(user.status)) {
     return res.status(403).json({ message: "Account is not active" });
   }

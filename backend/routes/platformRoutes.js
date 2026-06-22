@@ -11,6 +11,8 @@ const {
   snapshot,
   updateApplication,
   updateJob,
+  getSettings,
+  updateSettings,
 } = require("../controllers/platformController");
 const { requireAuth, requireRole } = require("../middleware/authMiddleware");
 
@@ -28,5 +30,7 @@ router.post("/interviews", requireAuth, requireRole("recruiter", "admin"), creat
 router.post("/messages", requireAuth, createMessage);
 router.post("/notifications", requireAuth, requireRole("admin"), createNotification);
 router.post("/complaints", requireAuth, createComplaint);
+router.get("/settings", requireAuth, requireRole("admin"), getSettings);
+router.patch("/settings", requireAuth, requireRole("admin"), updateSettings);
 
 module.exports = router;

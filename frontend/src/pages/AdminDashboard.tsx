@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
 import {
@@ -36,9 +36,10 @@ import {
   mockComplaints,
   mockAnalytics,
   mockApplications,
+  mockNotifications,
 } from "../data/mockData";
-import type { Recruiter, Candidate, Complaint } from "../data/mockData";
-import { apiRequest } from "../services/platformApi";
+import type { Recruiter, Candidate, Complaint, Notification } from "../data/mockData";
+import { apiRequest, fetchPlatformSnapshot, fetchSystemSettings, saveSystemSettings } from "../services/platformApi";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -119,14 +120,21 @@ function DashboardHome() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total Candidates" value={adminStats.totalCandidates} icon={<Users size={20} />} color="#0071e3" />
         <StatCard title="Total Recruiters" value={adminStats.totalRecruiters} icon={<Briefcase size={20} />} color="#f5a623" />
-        <StatCard title="Total Jobs" value={adminStats.totalJobs} icon={<FileText size={20} />} color="#3dc75a" />
-        <StatCard title="Applications" value={adminStats.totalApplications} icon={<CheckCircle size={20} />} color="#e74c3c" />
+        <StatCard title="Verified Recruiters" value={adminStats.verifiedRecruiters || 0} icon={<UserCheck size={20} />} color="#3dc75a" />
+        <StatCard title="Pending Recruiters" value={adminStats.pendingRecruiters || 0} icon={<AlertTriangle size={20} />} color="#f5a623" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="Active Jobs" value={adminStats.activeJobs || 0} icon={<FileText size={20} />} color="#3dc75a" />
+        <StatCard title="Closed Jobs" value={adminStats.closedJobs || 0} icon={<CheckSquare size={20} />} color="#e74c3c" />
+        <StatCard title="Applications" value={adminStats.totalApplications} icon={<CheckCircle size={20} />} color="#0071e3" />
+        <StatCard title="Interviews Scheduled" value={adminStats.interviewsScheduled} icon={<Calendar size={20} />} color="#9b59b6" />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="Interviews Scheduled" value={adminStats.interviewsScheduled} icon={<Calendar size={20} />} color="#9b59b6" />
+        <StatCard title="System Notifications" value={adminStats.systemNotifications || 0} icon={<Bell size={20} />} color="#0071e3" />
+        <StatCard title="Reports & Tickets" value={adminStats.reportsAndTickets || 0} icon={<MessageSquare size={20} />} color="#f5a623" />
         <StatCard title="Hired Candidates" value={adminStats.hiredCandidates} icon={<UserCheck size={20} />} color="#3dc75a" />
-        <StatCard title="Rejected Candidates" value={adminStats.rejectedCandidates} icon={<XCircle size={20} />} color="#e74c3c" />
       </div>
 
       {/* Recent Activity */}
@@ -171,8 +179,13 @@ function DashboardHome() {
 function UserManagement() {
   const [activeSubTab, setActiveSubTab] = useState<"recruiters" | "candidates">("recruiters");
   const [search, setSearch] = useState("");
-  const [recruiters, setRecruiters] = useState<Recruiter[]>(mockRecruiters);
-  const [candidates, setCandidates] = useState<Candidate[]>(mockCandidates);
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+
+  useEffect(() => {
+    setRecruiters([...mockRecruiters]);
+    setCandidates([...mockCandidates]);
+  }, [mockRecruiters.length, mockCandidates.length]);
 
   const filteredRecruiters = recruiters.filter(
     (r) =>
@@ -326,30 +339,37 @@ function UserManagement() {
 
 // Recruiter Verification
 function RecruiterVerification() {
-  const [recruiters, setRecruiters] = useState<Recruiter[]>(mockRecruiters.filter((r) => r.status === "pending"));
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
+  const [recruiterActionError, setRecruiterActionError] = useState("");
 
-  const handleApprove = async (id: string) => {
+  useEffect(() => {
+    setRecruiters([...mockRecruiters].filter((r) => r.status === "pending"));
+  }, [mockRecruiters.length]);
+
+  const updateRecruiterStatus = async (id: string, status: string) => {
     try {
       await apiRequest(`/recruiters/${id}/status`, {
         method: "PATCH",
-        body: JSON.stringify({ status: "approved" }),
+        body: JSON.stringify({ status }),
       });
-    } catch {
-      // Keep local workflow responsive if the backend is unreachable.
+    } catch (error) {
+      setRecruiterActionError(error instanceof Error ? error.message : "Unable to update recruiter status");
     }
-    setRecruiters(recruiters.filter((r) => r.id !== id));
+    setRecruiters((current) => current.filter((r) => r.id !== id));
   };
 
-  const handleReject = async (id: string) => {
+  const handleApprove = (id: string) => updateRecruiterStatus(id, "approved");
+  const handleReject = (id: string) => updateRecruiterStatus(id, "rejected");
+  const handleRequestInfo = async (id: string) => {
     try {
-      await apiRequest(`/recruiters/${id}/status`, {
+      await apiRequest(`/recruiters/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({ status: "rejected" }),
+        body: JSON.stringify({ verificationStatus: "pending", status: "pending" }),
       });
-    } catch {
-      // Keep local workflow responsive if the backend is unreachable.
+      setRecruiters((current) => current.filter((r) => r.id !== id));
+    } catch (error) {
+      setRecruiterActionError(error instanceof Error ? error.message : "Unable to request more information");
     }
-    setRecruiters(recruiters.filter((r) => r.id !== id));
   };
 
   return (
@@ -410,12 +430,20 @@ function RecruiterVerification() {
                   style={{ background: "#d4edda", color: "#155724" }}>
                   <CheckCircle size={16} /> Approve
                 </button>
+                <button onClick={() => handleRequestInfo(rec.id)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
+                  style={{ background: "#fff3cd", color: "#856404" }}>
+                  <AlertTriangle size={16} /> Request Info
+                </button>
                 <button onClick={() => handleReject(rec.id)}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
                   style={{ background: "#f8d7da", color: "#721c24" }}>
                   <XCircle size={16} /> Reject
                 </button>
               </div>
+              {recruiterActionError && (
+                <p className="text-sm mt-3" style={{ color: "#e74c3c" }}>{recruiterActionError}</p>
+              )}
             </div>
           ))}
         </div>
@@ -429,23 +457,58 @@ function OpportunitiesManagement() {
   const [jobs, setJobs] = useState(mockJobs);
   const [showForm, setShowForm] = useState(false);
   const [newJob, setNewJob] = useState({ title: "", company: "", location: "", type: "Remote", salary: "", description: "", skills: "", experience: "", deadline: "" });
+  const [savingJob, setSavingJob] = useState(false);
+  const [jobError, setJobError] = useState("");
 
-  const handleCreateJob = (e: React.FormEvent) => {
+  useEffect(() => {
+    setJobs([...mockJobs]);
+  }, [mockJobs.length]);
+
+  const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    const job = {
-      id: `job-${jobs.length + 1}`,
-      ...newJob,
-      skills: newJob.skills.split(",").map((s) => s.trim()),
-      status: "active" as const,
-      applications: 0,
-      shortlisted: 0,
-      interviewed: 0,
-      hired: 0,
-      postedDate: new Date().toISOString().split("T")[0],
+    setSavingJob(true);
+    setJobError("");
+
+    const payload = {
+      title: newJob.title,
+      company: newJob.company,
+      location: newJob.location,
+      type: newJob.type,
+      salary: newJob.salary,
+      description: newJob.description,
+      skillsRequired: newJob.skills.split(",").map((s) => s.trim()).filter(Boolean),
+      experienceLevel: newJob.experience,
+      deadline: newJob.deadline,
+      published: true,
+      status: "active",
+      active: true,
     };
-    setJobs([...jobs, job]);
-    setShowForm(false);
-    setNewJob({ title: "", company: "", location: "", type: "Remote", salary: "", description: "", skills: "", experience: "", deadline: "" });
+
+    try {
+      const response = await apiRequest<{ job: typeof jobs[number] }>("/platform/jobs", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setJobs([...jobs, response.job]);
+    } catch (error) {
+      setJobError(error instanceof Error ? error.message : "Could not create job");
+      const fallbackJob = {
+        id: `job-${jobs.length + 1}`,
+        ...newJob,
+        skills: newJob.skills.split(",").map((s) => s.trim()),
+        status: "active" as const,
+        applications: 0,
+        shortlisted: 0,
+        interviewed: 0,
+        hired: 0,
+        postedDate: new Date().toISOString().split("T")[0],
+      };
+      setJobs([...jobs, fallbackJob]);
+    } finally {
+      setSavingJob(false);
+      setShowForm(false);
+      setNewJob({ title: "", company: "", location: "", type: "Remote", salary: "", description: "", skills: "", experience: "", deadline: "" });
+    }
   };
 
   return (
@@ -525,10 +588,12 @@ function OpportunitiesManagement() {
             </div>
           </div>
           <button type="submit"
+            disabled={savingJob}
             className="px-6 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
             style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
-            Create Opportunity
+            {savingJob ? "Creating..." : "Create Opportunity"}
           </button>
+          {jobError && <p className="text-sm text-red-600">{jobError}</p>}
         </form>
       )}
 
@@ -700,7 +765,11 @@ function InterviewManagement() {
 
 // Feedback & Support
 function FeedbackSupport() {
-  const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+
+  useEffect(() => {
+    setComplaints([...mockComplaints]);
+  }, [mockComplaints.length]);
 
   const handleResolve = async (id: string) => {
     try {
@@ -758,10 +827,23 @@ function FeedbackSupport() {
 
 // Notification Center
 function NotificationCenter() {
-  const [notifs, setNotifs] = useState([
-    { id: "1", title: "Welcome to Skillora!", message: "We are excited to help you discover opportunities and advance your career.", type: "announcement", recipients: "all" },
-  ]);
+  type AdminNotification = Notification & { recipients: string };
+
+  const [notifs, setNotifs] = useState<AdminNotification[]>([]);
   const [newNotif, setNewNotif] = useState({ title: "", message: "", recipients: "all" });
+
+  useEffect(() => {
+    const next = mockNotifications.map((notification) => ({
+      ...notification,
+      recipients: "all",
+      read: notification.read ?? false,
+    }));
+    if (next.length > 0) {
+      setNotifs(next);
+    }
+  }, [mockNotifications.length]);
+
+  
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -831,6 +913,61 @@ function NotificationCenter() {
 
 // System Settings
 function SystemSettings() {
+  const [adminName, setAdminName] = useState("Skillora Admin");
+  const [adminEmail, setAdminEmail] = useState("admin@skillora.com");
+  const [autoApproveRecruiters, setAutoApproveRecruiters] = useState(false);
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSaved, setSettingsSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSystemSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        if (settings.adminName) setAdminName(String(settings.adminName));
+        if (settings.adminEmail) setAdminEmail(String(settings.adminEmail));
+        if (settings.autoApproveRecruiters !== undefined) setAutoApproveRecruiters(Boolean(settings.autoApproveRecruiters));
+        if (settings.emailNotifications !== undefined) setEmailNotifications(Boolean(settings.emailNotifications));
+        if (settings.maintenanceMode !== undefined) setMaintenanceMode(Boolean(settings.maintenanceMode));
+      })
+      .catch((error) => {
+        if (!cancelled) setSettingsError(error instanceof Error ? error.message : "Could not load settings");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSettings(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    setSettingsError("");
+    setSettingsSaved(false);
+
+    try {
+      const payload = {
+        adminName,
+        adminEmail,
+        autoApproveRecruiters,
+        emailNotifications,
+        maintenanceMode,
+      };
+      await saveSystemSettings(payload);
+      setSettingsSaved(true);
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : "Unable to save settings");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>System Settings</h1>
@@ -840,16 +977,18 @@ function SystemSettings() {
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Admin Name</label>
-            <input defaultValue="Skillora Admin" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input value={adminName} onChange={(e) => setAdminName(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Admin Email</label>
-            <input defaultValue="admin@skillora.com" className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
         </div>
-        <button className="px-6 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
-          Save Changes
+        <button disabled={loadingSettings || savingSettings} onClick={handleSaveSettings} className="px-6 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
+          {savingSettings ? "Saving settings..." : "Save Changes"}
         </button>
+        {settingsError && <p className="text-sm" style={{ color: "#e74c3c" }}>{settingsError}</p>}
+        {settingsSaved && <p className="text-sm" style={{ color: "#3dc75a" }}>Settings saved successfully.</p>}
       </div>
 
       <div className="dashboard-card space-y-6">
@@ -860,8 +999,8 @@ function SystemSettings() {
               <p className="text-sm font-medium" style={{ color: "#0a0a0c" }}>Auto-approve recruiters</p>
               <p className="text-xs" style={{ color: "#6c6c6c" }}>Automatically approve new recruiter registrations</p>
             </div>
-            <button className="w-12 h-6 rounded-full relative transition-all" style={{ background: "#e5e5e5" }}>
-              <div className="w-5 h-5 rounded-full absolute top-0.5 left-0.5 transition-all" style={{ background: "white" }} />
+            <button onClick={() => setAutoApproveRecruiters((value) => !value)} className="w-12 h-6 rounded-full relative transition-all" style={{ background: autoApproveRecruiters ? "#0071e3" : "#e5e5e5" }}>
+              <div className={`w-5 h-5 rounded-full absolute top-0.5 transition-all ${autoApproveRecruiters ? "right-0.5" : "left-0.5"}`} style={{ background: "white" }} />
             </button>
           </div>
           <div className="flex items-center justify-between">
@@ -869,8 +1008,8 @@ function SystemSettings() {
               <p className="text-sm font-medium" style={{ color: "#0a0a0c" }}>Email notifications</p>
               <p className="text-xs" style={{ color: "#6c6c6c" }}>Send email alerts for new applications</p>
             </div>
-            <button className="w-12 h-6 rounded-full relative transition-all" style={{ background: "#0071e3" }}>
-              <div className="w-5 h-5 rounded-full absolute top-0.5 right-0.5 transition-all" style={{ background: "white" }} />
+            <button onClick={() => setEmailNotifications((value) => !value)} className="w-12 h-6 rounded-full relative transition-all" style={{ background: emailNotifications ? "#0071e3" : "#e5e5e5" }}>
+              <div className={`w-5 h-5 rounded-full absolute top-0.5 transition-all ${emailNotifications ? "right-0.5" : "left-0.5"}`} style={{ background: "white" }} />
             </button>
           </div>
           <div className="flex items-center justify-between">
@@ -878,8 +1017,8 @@ function SystemSettings() {
               <p className="text-sm font-medium" style={{ color: "#0a0a0c" }}>Maintenance mode</p>
               <p className="text-xs" style={{ color: "#6c6c6c" }}>Put the platform in maintenance mode</p>
             </div>
-            <button className="w-12 h-6 rounded-full relative transition-all" style={{ background: "#e5e5e5" }}>
-              <div className="w-5 h-5 rounded-full absolute top-0.5 left-0.5 transition-all" style={{ background: "white" }} />
+            <button onClick={() => setMaintenanceMode((value) => !value)} className="w-12 h-6 rounded-full relative transition-all" style={{ background: maintenanceMode ? "#0071e3" : "#e5e5e5" }}>
+              <div className={`w-5 h-5 rounded-full absolute top-0.5 transition-all ${maintenanceMode ? "right-0.5" : "left-0.5"}`} style={{ background: "white" }} />
             </button>
           </div>
         </div>
@@ -892,6 +1031,20 @@ function SystemSettings() {
 export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPlatformSnapshot()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setDataReady(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -907,6 +1060,14 @@ export default function AdminDashboard() {
       default: return <DashboardHome />;
     }
   };
+
+  if (!dataReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#f4f4f4" }}>
+        <p className="text-sm font-medium" style={{ color: "#0a0a0c" }}>Loading admin data...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex" style={{ background: "#f4f4f4" }}>

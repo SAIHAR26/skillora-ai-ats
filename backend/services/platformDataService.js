@@ -299,14 +299,26 @@ async function getSnapshot() {
     listCollection(Notification, {}, 100),
     listCollection(Complaint, {}, 100),
   ]);
+  const totalApplicationsCount = await Application.countDocuments();
 
   const analytics = buildAnalytics(applications, interviews);
+  const verifiedRecruiters = recruiters.filter((item) => item.verificationStatus === "approved" || item.status === "approved" || item.verified).length;
+  const pendingRecruiters = recruiters.filter((item) => item.verificationStatus === "pending" || item.status === "pending").length;
+  const activeJobs = jobs.filter((item) => (item.status === "active" || item.status === "open") && item.active !== false).length;
+  const closedJobs = jobs.filter((item) => item.status === "closed" || item.status === "archived").length;
+
   const adminStats = {
     totalCandidates: candidates.length,
     totalRecruiters: recruiters.length,
+    verifiedRecruiters,
+    pendingRecruiters,
+    activeJobs,
+    closedJobs,
     totalJobs: jobs.length,
-    totalApplications: applications.length,
+    totalApplications: totalApplicationsCount,
     interviewsScheduled: interviews.filter((item) => item.status === "scheduled").length,
+    systemNotifications: notifications.length,
+    reportsAndTickets: complaints.length,
     hiredCandidates: applications.filter((item) => item.status === "selected").length,
     rejectedCandidates: applications.filter((item) => item.status === "rejected").length,
   };

@@ -4,6 +4,7 @@ const Interview = require("../models/Interview");
 const Message = require("../models/Message");
 const Notification = require("../models/Notification");
 const Complaint = require("../models/Complaint");
+const Setting = require("../models/Setting");
 const {
   getCollectionsReport,
   getSnapshot,
@@ -79,6 +80,35 @@ const createComplaint = asyncHandler(async (req, res) => {
   res.status(201).json({ complaint: toClient(complaint) });
 });
 
+const getSettings = asyncHandler(async (_req, res) => {
+  const settings = await Setting.find({}).lean();
+  const payload = settings.reduce((acc, setting) => ({
+    ...acc,
+    [setting.key]: setting.value,
+  }), {});
+  res.json(payload);
+});
+
+const updateSettings = asyncHandler(async (req, res) => {
+  const updatePayload = req.body || {};
+  const keys = Object.keys(updatePayload);
+  await Promise.all(
+    keys.map((key) =>
+      Setting.findOneAndUpdate(
+        { key },
+        { value: updatePayload[key] },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      ),
+    ),
+  );
+  const settings = await Setting.find({}).lean();
+  const payload = settings.reduce((acc, setting) => ({
+    ...acc,
+    [setting.key]: setting.value,
+  }), {});
+  res.json(payload);
+});
+
 module.exports = {
   createApplication,
   createComplaint,
@@ -91,4 +121,6 @@ module.exports = {
   snapshot,
   updateApplication,
   updateJob,
+  getSettings,
+  updateSettings,
 };
