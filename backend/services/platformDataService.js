@@ -133,12 +133,15 @@ async function ensureSeedLoginAccounts() {
 }
 
 async function ensureSeedProfiles() {
+  const janeSeed = seedData.candidates.find((candidate) => candidate.id === "cand-1");
+  const lasyaSeed = seedData.candidates.find((candidate) => candidate.id === "cand-lasya");
+
   await Promise.all([
     Candidate.updateOne(
       { id: "cand-1" },
       {
         $set: {
-          ...seedData.candidates[0],
+          ...janeSeed,
           name: "Jane Smith",
           email: "jane.smith@gmail.com",
           phone: "+1-555-0456",
@@ -147,15 +150,7 @@ async function ensureSeedProfiles() {
       },
       { upsert: true },
     ),
-    Candidate.updateOne(
-      { id: "cand-lasya" },
-      { $set: seedData.candidates.find((candidate) => candidate.id === "cand-lasya") },
-      { upsert: true },
-    ),
-    Candidate.updateMany(
-      { name: /^lasya$/i },
-      { $set: seedData.candidates.find((candidate) => candidate.id === "cand-lasya") },
-    ),
+    ensureUniqueCandidateSeed(lasyaSeed, { name: /^lasya$/i, email: "lasya@skillora.com" }),
     Recruiter.updateOne(
       { id: "rec-1" },
       {
@@ -173,6 +168,40 @@ async function ensureSeedProfiles() {
     ),
   ]);
 }
+async function ensureUniqueCandidateSeed(seedCandidate, aliases = {}) {
+  if (!seedCandidate?.id) return;
+
+  const aliasFilters = [
+    { id: seedCandidate.id },
+    seedCandidate.email ? { email: seedCandidate.email } : null,
+    aliases.email ? { email: aliases.email } : null,
+    aliases.name ? { name: aliases.name } : null,
+  ].filter(Boolean);
+
+  const matches = await Candidate.find({ $or: aliasFilters }).sort({ createdAt: 1, _id: 1 });
+  const canonical =
+    matches.find((candidate) => candidate.id === seedCandidate.id) ||
+    matches.find((candidate) => candidate.email === seedCandidate.email) ||
+    matches[0];
+
+  if (!canonical) {
+    await Candidate.updateOne({ id: seedCandidate.id }, { $set: seedCandidate }, { upsert: true });
+    return;
+  }
+
+  await Candidate.updateOne({ _id: canonical._id }, { $set: seedCandidate });
+
+  const duplicateIds = matches
+    .filter((candidate) => !candidate._id.equals(canonical._id))
+    .map((candidate) => candidate._id);
+
+  if (duplicateIds.length) {
+    await Candidate.updateMany(
+      { _id: { $in: duplicateIds }, id: seedCandidate.id },
+      { $unset: { id: "" } },
+    );
+  }
+}
 async function repairIncompleteProfiles() {
   const candidateFallbacks = ["/images/candidate-lasya.jpg", "/images/candidate-1.jpg", "/images/candidate-2.jpg"];
   const recruiterFallbacks = ["/images/recruiter-1.jpg", "/images/recruiter-2.jpg"];
@@ -185,7 +214,10 @@ async function repairIncompleteProfiles() {
       const source = isLasya ? seedData.candidates.find((item) => item.id === "cand-lasya") : seedMatch;
       const updates = {};
 
-      if (isLasya && source) Object.assign(updates, source);
+      if (isLasya && source) {
+        const { id, ...sourceWithoutId } = source;
+        Object.assign(updates, sourceWithoutId);
+      }
       if (!candidate.avatar) updates.avatar = source?.avatar || candidateFallbacks[index % candidateFallbacks.length];
       if (!candidate.specialization) updates.specialization = source?.specialization || candidate.degree || "Software Engineering";
       if (!Array.isArray(candidate.skills) || candidate.skills.length === 0) updates.skills = source?.skills || ["JavaScript", "React", "SQL"];
@@ -229,6 +261,28 @@ function withRecruiterDefaults(recruiter, index = 0) {
     role: recruiter.role || recruiter.roleInCompany || "Recruiter",
     hiredCount: Number(recruiter.hiredCount) || 0,
   };
+}
+
+function dedupePeopleByIdentity(records, seedRecords = []) {
+  const seedIds = new Set(seedRecords.map((record) => record.id).filter(Boolean));
+  const byIdentity = new Map();
+
+  records.forEach((record) => {
+    const key = record.name
+      ? `name:${String(record.name).trim().toLowerCase()}`
+      : record.email
+        ? `email:${String(record.email).toLowerCase()}`
+        : `id:${record.id || record._id}`;
+    const current = byIdentity.get(key);
+    const recordIsSeeded = seedIds.has(record.id);
+    const currentIsSeeded = current && seedIds.has(current.id);
+
+    if (!current || (recordIsSeeded && !currentIsSeeded)) {
+      byIdentity.set(key, record);
+    }
+  });
+
+  return [...byIdentity.values()];
 }
 async function upsertSeed(Model, records, key = "id") {
   if (!records.length) return;
@@ -343,11 +397,11 @@ async function getSnapshot() {
     notifications,
     recruiters,
     recruiterStats,
-    topCandidates: [...candidates]
+    topCandidates: dedupePeopleByIdentity(candidates, seedData.candidates)
       .map(withCandidateDefaults)
       .filter((candidate) => candidate.name)
       .sort((a, b) => b.atsScore - a.atsScore)
-      .slice(0, 4)
+      .slice(0, 3)
       .map((candidate) => ({
         id: candidate.id,
         name: candidate.name,
@@ -356,7 +410,7 @@ async function getSnapshot() {
         skills: candidate.skills.slice(0, 3),
         avatar: candidate.avatar,
       })),
-    topRecruiters: [...recruiters]
+    topRecruiters: dedupePeopleByIdentity(recruiters, seedData.recruiters)
       .map(withRecruiterDefaults)
       .filter((recruiter) => recruiter.name)
       .sort((a, b) => b.hiredCount - a.hiredCount)

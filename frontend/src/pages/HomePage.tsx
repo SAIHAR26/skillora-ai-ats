@@ -382,7 +382,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-8 md:grid-cols-3 max-w-5xl mx-auto">
             <div className="workflow-card p-8 rounded-xl" style={{ background: "white", boxShadow: "rgba(0,0,0,0.08) 0px 10px 40px -10px" }}>
               <div
                 className="w-14 h-14 rounded-xl flex items-center justify-center mb-6"
@@ -515,11 +515,11 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 max-w-5xl mx-auto">
             {topCandidates.map((candidate) => (
               <div
                 key={candidate.id}
-                className="p-6 rounded-xl text-center transition-all duration-300 hover:scale-105"
+                className="p-8 rounded-xl text-center transition-all duration-300 hover:scale-105 min-h-[278px] flex flex-col items-center justify-center"
                 style={{ background: "white", boxShadow: "rgba(0,0,0,0.08) 0px 10px 40px -10px" }}
               >
                 <img
@@ -574,11 +574,11 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-8 md:grid-cols-3 max-w-5xl mx-auto">
             {topRecruiters.map((recruiter) => (
               <div
                 key={recruiter.id}
-                className="p-8 rounded-xl text-center transition-all duration-300 hover:scale-105"
+                className="p-8 rounded-xl text-center transition-all duration-300 hover:scale-105 min-h-[300px] flex flex-col items-center justify-center"
                 style={{
                   background: "rgba(255,255,255,0.05)",
                   border: "1px solid rgba(255,255,255,0.1)",

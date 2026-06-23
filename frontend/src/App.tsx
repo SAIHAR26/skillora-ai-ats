@@ -94,7 +94,6 @@ function readStoredUser(): AuthUser | null {
 
 export default function App() {
   const [dataReady, setDataReady] = useState(false);
-  const [dataError, setDataError] = useState("");
   const [role, setRole] = useState<UserRole>(() => {
     const stored = localStorage.getItem("skillora_role");
     return (stored as UserRole) || null;
@@ -119,7 +118,7 @@ export default function App() {
       })
       .catch((error) => {
         if (!cancelled) {
-          setDataError(error instanceof Error ? error.message : "Could not load platform data");
+          console.warn("Could not load platform data", error);
           setDataReady(true);
         }
       });
@@ -156,11 +155,6 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ role, isLoggedIn, user, login, logout }}>
-      {dataError && (
-        <div className="fixed bottom-3 right-3 z-50 rounded-lg px-4 py-2 text-xs shadow" style={{ background: "#fff3cd", color: "#856404" }}>
-          Backend data unavailable: {dataError}
-        </div>
-      )}
       <BrowserRouter>
         <AppRoutes />
       </BrowserRouter>
