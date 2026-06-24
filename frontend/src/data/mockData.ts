@@ -1,5 +1,5 @@
 // Data containers hydrated from MongoDB through /api/platform/snapshot.
-// Keep these defaults empty so the UI never displays bundled demo records when the backend has no data.
+// The landing page keeps a tiny visual fallback so showcase sections do not render empty while the backend is recovering.
 
 export interface Job {
   id: string;
@@ -144,8 +144,16 @@ export const mockNotifications: Notification[] = [];
 export const mockComplaints: Complaint[] = [];
 export const mockAnalytics: AnalyticsData[] = [];
 
-export const topRecruiters: { id: string; name: string; company: string; role: string; hires: number; avatar: string }[] = [];
-export const topCandidates: { id: string; name: string; role: string; atsScore: number; skills: string[]; avatar: string }[] = [];
+export const topRecruiters: { id: string; name: string; company: string; role: string; hires: number; avatar: string }[] = [
+  { id: "rec-1", name: "John Doe", company: "Tech Solutions Inc", role: "Senior Recruiter", hires: 24, avatar: "/images/recruiter-1.jpg" },
+  { id: "rec-2", name: "Robert Hayes", company: "DataFlow Inc", role: "Talent Acquisition Lead", hires: 18, avatar: "/images/recruiter-2.jpg" },
+  { id: "rec-3", name: "Emily Davis", company: "CloudScale", role: "Senior Recruiter", hires: 12, avatar: "/images/recruiter-1.jpg" },
+];
+export const topCandidates: { id: string; name: string; role: string; atsScore: number; skills: string[]; avatar: string }[] = [
+  { id: "cand-lasya", name: "Lasya", role: "Artificial Intelligence and Data Science", atsScore: 96, skills: ["Python", "React", "Machine Learning"], avatar: "/images/candidate-lasya.jpg" },
+  { id: "cand-2", name: "Sarah Chen", role: "Data Science", atsScore: 95, skills: ["Python", "TensorFlow", "SQL"], avatar: "/images/candidate-2.jpg" },
+  { id: "cand-5", name: "Michael Brown", role: "AI/ML", atsScore: 93, skills: ["Python", "PyTorch", "NLP"], avatar: "/images/candidate-1.jpg" },
+];
 
 export const adminStats = {
   totalCandidates: 0,
