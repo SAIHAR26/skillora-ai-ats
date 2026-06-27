@@ -9,6 +9,7 @@ const aiRoutes = require("./routes/aiRoutes");
 const authRoutes = require("./routes/authRoutes");
 const candidateRoutes = require("./routes/candidateRoutes");
 const jobRoutes = require("./routes/jobRoutes");
+const messageRoutes = require("./routes/messageRoutes");
 const platformRoutes = require("./routes/platformRoutes");
 const recruiterRoutes = require("./routes/recruiterRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -52,6 +53,7 @@ app.use("/api/recruiters", recruiterRoutes);
 app.use("/api/recruit", recruiterRoutes);
 app.use("/api/candidates", candidateRoutes);
 app.use("/api/jobs", jobRoutes);
+app.use("/api/messages", messageRoutes);
 app.use("/api/platform", platformRoutes);
 
 // Compatibility route modules kept for existing clients.

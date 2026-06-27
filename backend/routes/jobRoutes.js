@@ -1,27 +1,18 @@
 const express = require("express");
 const router = express.Router();
-
 const {
   createJob,
   getJobs,
   getJobById,
   updateJob,
-  deleteJob
+  deleteJob,
 } = require("../controllers/jobController");
+const { protect, authorize } = require("../middleware/authMiddleware");
 
-// CREATE JOB
-router.post("/", createJob);
-
-// GET ALL JOBS
-router.get("/", getJobs);
-
-// GET SINGLE JOB
-router.get("/:id", getJobById);
-
-// UPDATE JOB
-router.put("/:id", updateJob);
-
-// DELETE JOB
-router.delete("/:id", deleteJob);
+router.get("/", protect, getJobs);
+router.get("/:id", protect, getJobById);
+router.post("/", protect, authorize("recruiter", "admin"), createJob);
+router.put("/:id", protect, authorize("recruiter", "admin"), updateJob);
+router.delete("/:id", protect, authorize("recruiter", "admin"), deleteJob);
 
 module.exports = router;

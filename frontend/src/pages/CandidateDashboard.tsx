@@ -20,7 +20,6 @@ import {
   Briefcase,
   Clock,
   ChevronRight,
-  Send,
   AlertTriangle,
   BookOpen,
   Target,
@@ -37,7 +36,6 @@ import {
   mockInterviews,
   skillGapData,
   aiJobRecommendations,
-  mockMessages,
   mockNotifications,
 } from "../data/mockData";
 import {
@@ -51,6 +49,7 @@ import type {
   SkillGapResult,
 } from "../services/aiRanking";
 import { apiRequest } from "../services/platformApi";
+import { MessagingPanel } from "../components/MessagingPanel";
 
 const fallbackJobRecommendations = (): JobRecommendation[] =>
   aiJobRecommendations.map((rec) => ({
@@ -407,10 +406,27 @@ function JobSearch() {
   const candidateId = currentCandidate?.id || user?.id || "candidate";
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ location: "", type: "", experience: "" });
+  const [jobs, setJobs] = useState(mockJobs);
+  const [error, setError] = useState("");
   const [appliedJobIds, setAppliedJobIds] = useState(() => new Set(mockApplications.filter((app) => app.candidateId === candidateId).map((app) => app.jobId)));
 
-  const filtered = mockJobs.filter((job) => {
-    const matchSearch = job.title.toLowerCase().includes(search.toLowerCase()) || job.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest<{ jobs: typeof mockJobs }>("/platform/jobs")
+      .then((result) => {
+        if (!cancelled) setJobs(result.jobs);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load jobs");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = jobs.filter((job) => {
+    const skills = job.skills || [];
+    const matchSearch = !search || job.title.toLowerCase().includes(search.toLowerCase()) || job.company.toLowerCase().includes(search.toLowerCase()) || skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
     const matchLoc = !filters.location || job.location.toLowerCase().includes(filters.location.toLowerCase());
     const matchType = !filters.type || job.type === filters.type;
     const matchExp = !filters.experience || job.experience === filters.experience;
@@ -420,6 +436,7 @@ function JobSearch() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Job Search</h1>
+      {error && <div className="dashboard-card text-sm" style={{ color: "#e74c3c" }}>{error}</div>}
 
       <div className="dashboard-card space-y-4">
         <div className="relative">
@@ -476,7 +493,7 @@ function JobSearch() {
             </div>
             <p className="text-sm mb-3" style={{ color: "#6c6c6c" }}>{job.description}</p>
             <div className="flex flex-wrap gap-2 mb-4">
-              {job.skills.map((skill) => (
+              {(job.skills || []).map((skill) => (
                 <span key={skill} className="px-2 py-0.5 rounded-full text-xs" style={{ background: "#f4f4f4", color: "#6c6c6c" }}>{skill}</span>
               ))}
             </div>
@@ -500,10 +517,10 @@ function JobSearch() {
                     method: "POST",
                     body: JSON.stringify(application),
                   });
-                } catch {
-                  // Keep the optimistic UI state when offline.
+                  setAppliedJobIds(new Set([...appliedJobIds, job.id]));
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Could not apply for this job");
                 }
-                setAppliedJobIds(new Set([...appliedJobIds, job.id]));
               }}
               className="px-6 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
               style={{ background: appliedJobIds.has(job.id) ? "#d4edda" : "#0071e3", color: appliedJobIds.has(job.id) ? "#155724" : "white" }}
@@ -512,11 +529,11 @@ function JobSearch() {
             </button>
           </div>
         ))}
+        {filtered.length === 0 && <div className="dashboard-card text-center text-sm" style={{ color: "#6c6c6c" }}>No matching open jobs found.</div>}
       </div>
     </div>
   );
 }
-
 // AI Recommendations
 function AIRecommendations() {
   const [recommendations, setRecommendations] = useState<JobRecommendation[]>(fallbackJobRecommendations);
@@ -824,67 +841,8 @@ function SkillGapAnalysis() {
 
 // Messages
 function Messages() {
-  const [messages, setMessages] = useState(mockMessages);
-  const [reply, setReply] = useState("");
-
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reply.trim()) return;
-    const message = {
-      id: `msg-${messages.length + 1}`,
-      senderId: "cand-1",
-      senderName: "You",
-      senderRole: "candidate",
-      recipientId: "rec-1",
-      content: reply,
-      timestamp: new Date().toISOString(),
-      read: true,
-    };
-    try {
-      const result = await apiRequest<{ message: typeof message }>("/platform/messages", {
-        method: "POST",
-        body: JSON.stringify(message),
-      });
-      setMessages([...messages, result.message]);
-    } catch {
-      setMessages([...messages, message]);
-    }
-    setReply("");
-  };
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
-
-      <div className="dashboard-card" style={{ minHeight: "400px" }}>
-        <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
-          {/* Welcome message */}
-          <div className="flex justify-start">
-            <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl rounded-bl-sm" style={{ background: "#f4f4f4", color: "#0a0a0c" }}>
-              <p className="text-xs font-medium mb-1 opacity-70">Skillora Admin</p>
-              <p className="text-sm">Welcome to Skillora! We are excited to help you discover opportunities, improve your skills, and advance your career.</p>
-            </div>
-          </div>
-          {messages.map((msg) => (
-            <div key={msg.id} className={`flex ${msg.senderRole === "candidate" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-xl ${msg.senderRole === "candidate" ? "rounded-br-sm" : "rounded-bl-sm"}`}
-                style={{ background: msg.senderRole === "candidate" ? "#0071e3" : "#f4f4f4", color: msg.senderRole === "candidate" ? "white" : "#0a0a0c" }}>
-                <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
-                <p className="text-sm">{msg.content}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-        <form onSubmit={handleSend} className="flex gap-2 pt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
-          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Type your message..."
-            className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
-            <Send size={16} />
-          </button>
-        </form>
-      </div>
-    </div>
-  );
+  const { user } = useAuth();
+  return <MessagingPanel currentUser={user} allowedRoles={["recruiter", "candidate"]} />;
 }
 
 // Notifications
@@ -1034,3 +992,8 @@ export default function CandidateDashboard() {
     </div>
   );
 }
+
+
+
+
+

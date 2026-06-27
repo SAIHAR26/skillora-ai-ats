@@ -1,116 +1,135 @@
+const mongoose = require("mongoose");
 const Job = require("../models/Job");
 const Application = require("../models/Application");
+const Recruiter = require("../models/Recruiter");
+const { toClient } = require("../services/platformDataService");
+
+const idFilter = (id) => (mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { id });
+
+async function recruiterIdsForUser(user) {
+  if (!user || user.role !== "recruiter") return [];
+  const recruiter = await Recruiter.findOne({ $or: [{ userId: user._id }, { email: user.email }] }).lean();
+  return [String(user._id), recruiter?.id, recruiter?._id ? String(recruiter._id) : null].filter(Boolean);
+}
 
 exports.listJobs = async (req, res) => {
   const filters = { published: true, active: true };
-  const { recruiterId, status, location, employmentType, title, skill } = req.query;
+  const { recruiterId, mine, status, location, employmentType, type, title, skill, search } = req.query;
 
-  if (recruiterId) filters.recruiterId = recruiterId;
+  if (mine === "true" && req.user?.role === "recruiter") {
+    filters.recruiterId = { $in: await recruiterIdsForUser(req.user) };
+  } else if (recruiterId) {
+    filters.recruiterId = recruiterId;
+  }
+
   if (status) filters.status = status;
   if (location) filters.location = new RegExp(location, "i");
   if (employmentType) filters.employmentType = employmentType;
+  if (type) filters.type = type;
   if (title) filters.title = new RegExp(title, "i");
-  if (skill) filters.skillsRequired = { $in: [new RegExp(skill, "i")] };
+  if (skill) filters.$or = [{ skillsRequired: { $in: [new RegExp(skill, "i")] } }, { skills: { $in: [new RegExp(skill, "i")] } }];
+  if (search) {
+    const rx = new RegExp(search, "i");
+    filters.$or = [{ title: rx }, { company: rx }, { location: rx }, { skills: { $in: [rx] } }, { skillsRequired: { $in: [rx] } }];
+  }
 
   const jobs = await Job.find(filters).sort({ createdAt: -1 });
-  res.json(jobs);
+  res.json({ jobs: jobs.map(toClient) });
 };
 
 exports.getJobs = exports.listJobs;
 
 exports.getJobById = async (req, res) => {
-  const filter = req.params.id.match(/^[a-f\d]{24}$/i) ? { _id: req.params.id } : { id: req.params.id };
-  const job = await Job.findOne(filter);
-  if (!job) {
-    return res.status(404).json({ message: "Job not found" });
-  }
-  res.json(job);
+  const job = await Job.findOne(idFilter(req.params.id));
+  if (!job) return res.status(404).json({ message: "Job not found" });
+  res.json(toClient(job));
 };
 
 exports.createJob = async (req, res) => {
-  const { recruiterId, title, description, skillsRequired, salaryRange, location, employmentType, applicationDeadline } = req.body;
+  const title = req.body.title;
+  if (!title) return res.status(400).json({ message: "Job title is required" });
 
-  if (!recruiterId || !title) {
-    return res.status(400).json({ message: "Recruiter ID and title are required" });
+  const recruiterIds = await recruiterIdsForUser(req.user);
+  const recruiter = req.user?.role === "recruiter"
+    ? await Recruiter.findOne({ $or: [{ userId: req.user._id }, { email: req.user.email }] }).lean()
+    : null;
+  const recruiterId = req.body.recruiterId || recruiterIds[0];
+  if (!recruiterId && req.user?.role !== "admin") {
+    return res.status(400).json({ message: "Recruiter profile is required before posting jobs" });
   }
 
+  const skills = Array.isArray(req.body.skills) ? req.body.skills : String(req.body.skills || req.body.skillsRequired || "").split(",").map((item) => item.trim()).filter(Boolean);
   const job = await Job.create({
+    id: req.body.id || `job-${Date.now()}`,
     recruiterId,
     title,
-    description,
-    skillsRequired: Array.isArray(skillsRequired) ? skillsRequired : skillsRequired ? skillsRequired.split(",").map((item) => item.trim()) : [],
-    salaryRange: salaryRange || {},
-    location,
-    employmentType,
-    applicationDeadline,
+    company: req.body.company || recruiter?.companyName || "",
+    description: req.body.description,
+    skills,
+    skillsRequired: skills,
+    experience: req.body.experience,
+    experienceLevel: req.body.experienceLevel || req.body.experience,
+    salary: req.body.salary,
+    salaryRange: req.body.salaryRange || {},
+    location: req.body.location,
+    type: req.body.type || "Remote",
+    employmentType: req.body.employmentType || req.body.type,
+    deadline: req.body.deadline,
+    applicationDeadline: req.body.applicationDeadline || req.body.deadline,
     published: true,
-    status: "open",
+    status: req.body.status || "active",
     active: true,
+    applications: 0,
+    totalApplicants: 0,
+    shortlisted: 0,
+    interviewed: 0,
+    hired: 0,
+    postedDate: new Date().toISOString().slice(0, 10),
   });
 
-  res.status(201).json({ message: "Job created", job });
+  if (recruiter?._id) await Recruiter.updateOne({ _id: recruiter._id }, { $inc: { jobsPosted: 1 } });
+  res.status(201).json({ message: "Job created", job: toClient(job) });
 };
 
 exports.updateJob = async (req, res) => {
-  const job = await Job.findById(req.params.id);
-  if (!job) {
-    return res.status(404).json({ message: "Job not found" });
+  const job = await Job.findOne(idFilter(req.params.id));
+  if (!job) return res.status(404).json({ message: "Job not found" });
+
+  if (req.user?.role === "recruiter") {
+    const allowed = await recruiterIdsForUser(req.user);
+    if (!allowed.includes(String(job.recruiterId))) return res.status(403).json({ message: "You can update only your own jobs" });
   }
 
-  const updateFields = [
-    "title",
-    "description",
-    "skillsRequired",
-    "experienceLevel",
-    "salaryRange",
-    "location",
-    "employmentType",
-    "applicationDeadline",
-    "published",
-    "status",
-    "active",
-  ];
-
-  updateFields.forEach((field) => {
+  ["title", "description", "experience", "experienceLevel", "salary", "salaryRange", "location", "employmentType", "type", "deadline", "applicationDeadline", "published", "status", "active"].forEach((field) => {
     if (req.body[field] !== undefined) job[field] = req.body[field];
   });
-
-  if (req.body.skillsRequired && !Array.isArray(req.body.skillsRequired)) {
-    job.skillsRequired = req.body.skillsRequired.split(",").map((item) => item.trim());
+  if (req.body.skills !== undefined || req.body.skillsRequired !== undefined) {
+    const skills = Array.isArray(req.body.skills || req.body.skillsRequired) ? (req.body.skills || req.body.skillsRequired) : String(req.body.skills || req.body.skillsRequired || "").split(",").map((item) => item.trim()).filter(Boolean);
+    job.skills = skills;
+    job.skillsRequired = skills;
   }
 
   await job.save();
-  res.json({ message: "Job updated", job });
+  res.json({ message: "Job updated", job: toClient(job) });
 };
 
 exports.deleteJob = async (req, res) => {
-  const job = await Job.findById(req.params.id);
-  if (!job) {
-    return res.status(404).json({ message: "Job not found" });
+  const job = await Job.findOne(idFilter(req.params.id));
+  if (!job) return res.status(404).json({ message: "Job not found" });
+  if (req.user?.role === "recruiter") {
+    const allowed = await recruiterIdsForUser(req.user);
+    if (!allowed.includes(String(job.recruiterId))) return res.status(403).json({ message: "You can delete only your own jobs" });
   }
-  job.active = false;
-  job.status = "archived";
-  await job.save();
-  res.json({ message: "Job archived", job });
+  await job.deleteOne();
+  res.json({ message: "Job deleted", job: toClient(job) });
 };
 
-exports.updateJobStatus = async (req, res) => {
-  const job = await Job.findById(req.params.id);
-  if (!job) {
-    return res.status(404).json({ message: "Job not found" });
-  }
-  const { status, published } = req.body;
-  if (status) {
-    job.status = status;
-  }
-  if (published !== undefined) {
-    job.published = published;
-  }
-  await job.save();
-  res.json({ message: "Job status updated", job });
-};
+exports.updateJobStatus = exports.updateJob;
 
 exports.getJobApplications = async (req, res) => {
-  const applications = await Application.find({ jobId: req.params.id }).populate("candidateId resumeId").sort({ appliedAt: -1 });
-  res.json(applications);
+  const job = await Job.findOne(idFilter(req.params.id));
+  if (!job) return res.status(404).json({ message: "Job not found" });
+  const ids = [String(job._id), job.id].filter(Boolean);
+  const applications = await Application.find({ jobId: { $in: ids } }).populate("candidateId resumeId").sort({ appliedAt: -1 });
+  res.json({ applications: applications.map(toClient) });
 };

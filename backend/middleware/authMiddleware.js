@@ -3,7 +3,7 @@ const { verifyToken } = require("../services/authService");
 
 async function protect(req, res, next) {
   const header = req.headers.authorization || "";
-  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : req.query.token || "";
   const payload = verifyToken(token);
 
   if (!payload) {
@@ -41,3 +41,4 @@ module.exports = {
   requireAuth: protect,
   requireRole: authorize,
 };
+
