@@ -30,6 +30,7 @@ The platform provides dedicated modules for Admins, Recruiters, and Candidates, 
 * Skill Gap Analysis
 * Application Tracking System
 
+
 ### Admin Module
 
 * Recruiter Verification & Approval
