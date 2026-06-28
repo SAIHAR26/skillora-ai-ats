@@ -73,3 +73,13 @@ export async function fetchDatabaseReport() {
   }>("/platform/database-report");
 }
 
+export async function fetchSystemSettings() {
+  return apiRequest<Record<string, unknown>>("/platform/settings");
+}
+
+export async function saveSystemSettings(payload: Record<string, unknown>) {
+  return apiRequest<Record<string, unknown>>("/platform/settings", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}

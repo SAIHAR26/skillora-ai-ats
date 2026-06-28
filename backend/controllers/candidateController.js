@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Candidate = require("../models/Candidate");
+const Notification = require("../models/Notification");
 const Resume = require("../models/Resume");
 const Application = require("../models/Application");
 const { toClient } = require("../services/platformDataService");
@@ -25,6 +26,18 @@ const getCandidate = asyncHandler(async (req, res) => {
   if (!candidate) {
     return res.status(404).json({ message: "Candidate not found" });
   }
+  return res.json(candidate);
+});
+
+const getCurrentCandidate = asyncHandler(async (req, res) => {
+  const candidate = await Candidate.findOne({
+    $or: [{ userId: req.user._id }, { userId: req.user.id }, { email: req.user.email }],
+  }).populate("userId", "name email role status");
+
+  if (!candidate) {
+    return res.status(404).json({ message: "Candidate profile not found for the current user" });
+  }
+
   return res.json(candidate);
 });
 
@@ -81,25 +94,42 @@ const addResume = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
-  const { originalFileName, storageUrl, contentType, fileSize, extractedText, parsedSkills, processed } = req.body;
-  if (!originalFileName || !storageUrl) {
-    return res.status(400).json({ message: "Resume file metadata is required" });
+  const { originalFileName, storageUrl, contentType, fileSize, extractedText, parsedSkills, processed, atsScore, analysis, recommendations } = req.body;
+  if (!originalFileName) {
+    return res.status(400).json({ message: "Resume file name is required" });
   }
 
   const resume = await Resume.create({
     candidateId: candidate._id,
     originalFileName,
-    storageUrl,
+    storageUrl: storageUrl || "",
     contentType,
     fileSize,
     extractedText,
     parsedSkills,
+    atsScore,
+    analysis: analysis || {},
+    recommendations: Array.isArray(recommendations) ? recommendations : [],
     processed: processed || false,
   });
 
   candidate.resumeIds.push(resume._id);
-  candidate.resumeUrl = storageUrl;
+  if (storageUrl) candidate.resumeUrl = storageUrl;
+  if (typeof atsScore === "number") candidate.atsScore = atsScore;
+  if (Array.isArray(parsedSkills) && parsedSkills.length) {
+    candidate.skills = Array.from(new Set([...(candidate.skills || []), ...parsedSkills]));
+  }
   await candidate.save();
+
+  await Notification.create({
+    userId: candidate.userId || candidate._id,
+    type: processed ? "resume_analyzed" : "resume_uploaded",
+    title: processed ? "Resume analyzed" : "Resume uploaded",
+    message: processed && typeof atsScore === "number"
+      ? `Your resume was analyzed with an ATS score of ${atsScore}%.`
+      : "Your resume metadata was saved.",
+    metadata: { resumeId: resume._id, atsScore },
+  });
 
   return res.status(201).json({ message: "Resume metadata saved", resume });
 });
@@ -128,6 +158,7 @@ const getCandidateApplications = asyncHandler(async (req, res) => {
 
 module.exports = {
   addResume,
+  getCurrentCandidate,
   getCandidate,
   getCandidateApplications,
   getCandidateResumes,

@@ -48,6 +48,7 @@ export interface Candidate {
 
 export interface Recruiter {
   id: string;
+  userId?: string;
   name: string;
   email: string;
   companyEmail: string;
@@ -160,9 +161,15 @@ export const topCandidates: { id: string; name: string; role: string; atsScore: 
 export const adminStats = {
   totalCandidates: 0,
   totalRecruiters: 0,
+  verifiedRecruiters: 0,
+  pendingRecruiters: 0,
+  activeJobs: 0,
+  closedJobs: 0,
   totalJobs: 0,
   totalApplications: 0,
   interviewsScheduled: 0,
+  systemNotifications: 0,
+  reportsAndTickets: 0,
   hiredCandidates: 0,
   rejectedCandidates: 0,
 };
