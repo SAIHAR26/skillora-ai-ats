@@ -1,101 +1,134 @@
+const Candidate = require("../models/Candidate");
+const Recruiter = require("../models/Recruiter");
 const Message = require("../models/Message");
-const Notification = require("../models/Notification");
-const User = require("../models/User");
+const { toClient } = require("../services/platformDataService");
 
-function currentUserId(req) {
-  return String(req.user._id);
+const clients = new Map();
+const presence = new Map();
+
+const asyncHandler = (handler) => async (req, res, next) => {
+  try {
+    await handler(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
+function currentParticipant(req) {
+  return {
+    id: String(req.user?._id || req.auth?.id || ""),
+    name: req.user?.name || "User",
+    role: req.user?.role || "user",
+  };
 }
 
-exports.listUsersByRole = async (req, res) => {
-  const { role, search } = req.query;
-  if (!["candidate", "recruiter"].includes(role)) {
-    return res.status(400).json({ message: "role must be candidate or recruiter" });
-  }
+function publicPerson(record, role) {
+  const item = toClient(record);
+  const userId = item.userId ? String(item.userId) : item.id;
+  const status = presence.get(userId);
+  return {
+    id: userId,
+    profileId: item.id,
+    name: item.name,
+    email: item.email,
+    role,
+    avatar: item.avatar,
+    subtitle: role === "recruiter" ? item.companyName || item.companyEmail || "Recruiter" : item.specialization || item.degree || "Candidate",
+    resumeUrl: item.resumeUrl || "",
+    online: Boolean(status?.online),
+    lastSeen: status?.lastSeen || item.updatedAt || item.createdAt || null,
+  };
+}
 
-  const filter = { role, status: { $in: ["active", "approved"] } };
-  if (search) {
-    const regex = new RegExp(search, "i");
-    filter.$or = [{ name: regex }, { email: regex }];
-  }
+function emitTo(userId, event, payload) {
+  const res = clients.get(String(userId));
+  if (!res) return;
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
 
-  const users = await User.find(filter).select("name email role status lastLoginAt").limit(50).lean();
-  res.json({
-    users: users.map((user) => ({
-      id: String(user._id),
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      online: false,
-      lastSeen: user.lastLoginAt || null,
-    })),
+const stream = asyncHandler(async (req, res) => {
+  const participant = currentParticipant(req);
+  presence.set(participant.id, { online: true, lastSeen: new Date().toISOString() });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+  res.write(`event: ready\ndata: ${JSON.stringify({ userId: participant.id })}\n\n`);
+  clients.set(participant.id, res);
+
+  req.on("close", () => {
+    clients.delete(participant.id);
+    presence.set(participant.id, { online: false, lastSeen: new Date().toISOString() });
   });
-};
+});
 
-exports.listConversations = async (req, res) => {
-  const userId = currentUserId(req);
-  const messages = await Message.find({
-    $or: [{ senderId: userId }, { recipientId: userId }],
-  }).sort({ createdAt: -1 }).lean();
+const listUsers = asyncHandler(async (req, res) => {
+  const role = req.query.role === "recruiter" ? "recruiter" : "candidate";
+  const search = String(req.query.search || "").trim();
+  const query = search
+    ? { $or: [{ name: new RegExp(search, "i") }, { email: new RegExp(search, "i") }] }
+    : {};
+  const Model = role === "recruiter" ? Recruiter : Candidate;
+  const records = await Model.find(query).limit(100).lean();
+  res.json({ users: records.map((record) => publicPerson(record, role)) });
+});
 
-  const byUser = new Map();
-  messages.forEach((message) => {
-    const otherId = message.senderId === userId ? message.recipientId : message.senderId;
-    if (!byUser.has(otherId)) {
-      byUser.set(otherId, {
-        userId: otherId,
-        lastMessage: message,
-        unreadCount: 0,
-      });
-    }
-    if (message.recipientId === userId && !message.read) {
-      byUser.get(otherId).unreadCount += 1;
-    }
-  });
-
-  res.json({ conversations: [...byUser.values()] });
-};
-
-exports.getConversation = async (req, res) => {
-  const userId = currentUserId(req);
-  const otherUserId = String(req.params.userId);
+const conversation = asyncHandler(async (req, res) => {
+  const participant = currentParticipant(req);
+  const otherId = String(req.params.userId);
   const messages = await Message.find({
     $or: [
-      { senderId: userId, recipientId: otherUserId },
-      { senderId: otherUserId, recipientId: userId },
+      { senderId: participant.id, recipientId: otherId },
+      { senderId: otherId, recipientId: participant.id },
     ],
-  }).sort({ createdAt: 1 });
+  }).sort({ createdAt: 1 }).limit(250).lean();
 
-  await Message.updateMany({ senderId: otherUserId, recipientId: userId, read: false }, { $set: { read: true, readAt: new Date() } });
-  res.json({ messages });
-};
+  await Message.updateMany({ senderId: otherId, recipientId: participant.id, read: false }, { $set: { read: true } });
+  res.json({ messages: messages.map(toClient) });
+});
 
-exports.sendMessage = async (req, res) => {
-  const { recipientId, content, attachments } = req.body;
+const sendMessage = asyncHandler(async (req, res) => {
+  const participant = currentParticipant(req);
+  const recipientId = String(req.body.recipientId || "");
+  const content = String(req.body.content || "").trim();
   if (!recipientId || !content) {
-    return res.status(400).json({ message: "recipientId and content are required" });
+    return res.status(400).json({ message: "Recipient and message content are required" });
   }
 
-  const recipient = await User.findById(recipientId).select("role name");
-  if (!recipient) return res.status(404).json({ message: "Recipient not found" });
-
   const message = await Message.create({
-    senderId: currentUserId(req),
-    senderName: req.user.name,
-    senderRole: req.user.role,
-    recipientId: String(recipient._id),
-    recipientRole: recipient.role,
+    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    senderId: participant.id,
+    senderName: participant.name,
+    senderRole: participant.role,
+    recipientId,
     content,
-    attachments: Array.isArray(attachments) ? attachments : [],
+    attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
+    resumeShared: Boolean(req.body.resumeShared),
+    timestamp: new Date().toISOString(),
+    read: false,
   });
 
-  await Notification.create({
-    userId: recipient._id,
-    type: "new_message",
-    title: "New message",
-    message: `${req.user.name} sent you a message.`,
-    metadata: { messageId: message._id, senderId: req.user._id },
-  });
+  const payload = toClient(message);
+  emitTo(recipientId, "message", payload);
+  emitTo(participant.id, "message", payload);
+  res.status(201).json({ message: payload });
+});
 
-  res.status(201).json({ message: "Message sent", data: message });
+const unreadCounts = asyncHandler(async (req, res) => {
+  const participant = currentParticipant(req);
+  const rows = await Message.aggregate([
+    { $match: { recipientId: participant.id, read: false } },
+    { $group: { _id: "$senderId", count: { $sum: 1 } } },
+  ]);
+  res.json({ counts: Object.fromEntries(rows.map((row) => [row._id, row.count])) });
+});
+
+module.exports = {
+  conversation,
+  listUsers,
+  sendMessage,
+  stream,
+  unreadCounts,
 };
-

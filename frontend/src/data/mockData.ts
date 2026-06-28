@@ -18,6 +18,7 @@ export interface Job {
   interviewed: number;
   hired: number;
   postedDate: string;
+  recruiterId?: string;
 }
 
 export interface Candidate {
@@ -103,6 +104,8 @@ export interface Message {
   content: string;
   timestamp: string;
   read: boolean;
+  attachments?: { name: string; url: string; type?: string; size?: number }[];
+  resumeShared?: boolean;
 }
 
 export interface Notification {

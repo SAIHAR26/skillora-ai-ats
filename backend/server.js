@@ -15,7 +15,7 @@ const applicationRoutes = require("./routes/applications");
 const interviewRoutes = require("./routes/interviews");
 const notificationRoutes = require("./routes/notifications");
 const complaintRoutes = require("./routes/complaints");
-const messageRoutes = require("./routes/messages");
+const messageRoutes = require("./routes/messageRoutes");
 const platformRoutes = require("./routes/platformRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 
@@ -57,14 +57,11 @@ app.use("/api/users", userRoutes);
 app.use("/api/recruiters", recruiterRoutes);
 app.use("/api/candidates", candidateRoutes);
 app.use("/api/jobs", jobRoutes);
-
-// ✅ IMPORTANT FIX (APPLICATIONS)
 app.use("/api/applications", applicationRoutes);
 app.use("/api/interviews", interviewRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/messages", messageRoutes);
-
 app.use("/api/platform", platformRoutes);
 app.use("/api/ai", aiRoutes);
 
