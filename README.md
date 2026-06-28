@@ -1,77 +1,93 @@
-# Skillora
+# 🚀 Skillora
 
-### AI-Powered Applicant Tracking & Candidate Ranking Platform
+## AI-Powered Applicant Tracking & Candidate Ranking Platform
 
-## Overview
+Skillora is a full-stack AI-powered recruitment platform built using the **MERN Stack**. It simplifies the hiring process by combining intelligent resume screening, ATS-based candidate evaluation, AI-driven candidate ranking, and recruiter-centric workflow management into a single platform.
 
-Skillora is a full-stack recruitment platform developed using the MERN Stack that streamlines the hiring process through intelligent resume screening, ATS-based candidate evaluation, AI-driven candidate ranking, and recruiter-focused hiring workflows.
+The system provides dedicated portals for **Administrators, Recruiters, and Candidates**, enabling seamless recruitment management, application tracking, resume analysis, and data-driven hiring decisions.
 
-The platform provides dedicated modules for Admins, Recruiters, and Candidates, enabling efficient recruitment management, application tracking, candidate assessment, and data-driven hiring decisions.
+---
 
-## Key Features
+# ✨ Key Features
 
-### Recruiter Module
+## 👨‍💼 Recruiter Module
 
-* Recruiter Registration & Authentication
+* Recruiter Registration & Secure Authentication
 * Company Profile Management
-* Job Posting & Management
+* Job Posting & Job Management
 * Candidate Application Tracking
-* ATS Score Evaluation
+* AI-Powered ATS Resume Scoring
 * AI Candidate Ranking
 * Recruiter Analytics Dashboard
 
-### Candidate Module
+## 👩‍🎓 Candidate Module
 
 * Candidate Registration & Authentication
 * Profile & Resume Management
-* Resume Upload & Analysis
+* Resume Upload & AI Resume Analysis
 * ATS Score Generation
-* AI-Powered Job Recommendations
+* AI Job Recommendations
 * Skill Gap Analysis
-* Application Tracking System
+* Job Application Tracking
 
-### Admin Module
+## 🛠️ Admin Module
 
 * Recruiter Verification & Approval
-* User Management
+* User & Role Management
 * Platform Monitoring
 * Complaint & Support Management
-* Analytics & Reporting Dashboard
+* Analytics & Reports Dashboard
 
-### AI & Machine Learning Features
+## 🤖 AI & Machine Learning
 
 * ATS Resume Screening
 * Resume Classification
-* Candidate Ranking System
+* AI Candidate Ranking
 * Hiring Prediction Model
-* AI Job Recommendation Engine
+* Intelligent Job Recommendation Engine
 * Automated Resume Analysis
 
-## Technology Stack
+---
 
-**Frontend**
+# 🛠️ Technology Stack
+
+### Frontend
 
 * React
 * TypeScript
 * Vite
 * Tailwind CSS
 
-**Backend**
+### Backend
 
 * Node.js
 * Express.js
 
-**Database**
+### Database
 
 * MongoDB Atlas
 
-**AI/ML**
+### AI / Machine Learning
 
 * Python
-* Scikit-Learn
+* Scikit-learn
 * Pandas
 * NumPy
 
-## Project Status
+---
 
-Current Development Status: **Backend Integrated, MongoDB Connected, AI Models Trained and Integrated, Core Modules Under Final Testing & Validation.**
+# 📌 Current Development Status
+
+* ✅ MERN Stack Architecture Implemented
+* ✅ MongoDB Atlas Integrated
+* ✅ Authentication & Authorization
+* ✅ AI Models Trained & Integrated
+* ✅ ATS Resume Scoring
+* ✅ Candidate Ranking System
+* ✅ AI Job Recommendation Engine
+* ✅ Recruiter, Candidate & Admin Modules Implemented
+* 🔄 Final Module Testing & Validation in Progress
+
+---
+
+**Skillora aims to make recruitment faster, smarter, and more efficient by combining modern web technologies with Artificial Intelligence and Machine Learning.**
