@@ -145,6 +145,17 @@ function scoreJobForCandidate(candidate, job) {
 }
 
 const recommendJobs = asyncHandler(async (req, res) => {
+  const candidateId = req.body.candidateId || req.body.cvId;
+  if (candidateId && candidateId !== "0") {
+    const result = await getCandidateRecommendations(candidateId, req.body.limit);
+    res.json({
+      ...result,
+      candidate: {
+        ...result.candidate,
+        cvId: result.candidate.id,
+      },
+    });
+    return;
   const candidateId = req.body.candidateId || req.query.candidateId;
   if (candidateId || req.user?.role === "candidate") {
     const candidate = candidateId
@@ -185,6 +196,13 @@ const predictSelection = asyncHandler(async (req, res) => {
 });
 
 const skillGap = asyncHandler(async (req, res) => {
+  const candidateId = req.body.candidateId || req.body.cvId;
+  if (candidateId && candidateId !== "0") {
+    const result = await getCandidateSkillGap(candidateId, req.body.jobId);
+    res.json(result);
+    return;
+  }
+
   const result = await aiModelService.skillGap(req.body);
   res.json(result);
 });

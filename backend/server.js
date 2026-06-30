@@ -11,6 +11,7 @@ const userRoutes = require("./routes/userRoutes");
 const recruiterRoutes = require("./routes/recruiterRoutes");
 const candidateRoutes = require("./routes/candidateRoutes");
 const jobRoutes = require("./routes/jobRoutes");
+const messageRoutes = require("./routes/messages");
 const applicationRoutes = require("./routes/applications");
 const interviewRoutes = require("./routes/interviews");
 const notificationRoutes = require("./routes/notifications");

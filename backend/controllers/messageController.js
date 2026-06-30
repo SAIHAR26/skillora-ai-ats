@@ -1,10 +1,7 @@
-const Candidate = require("../models/Candidate");
-const Recruiter = require("../models/Recruiter");
 const Message = require("../models/Message");
-const { toClient } = require("../services/platformDataService");
-
-const clients = new Map();
-const presence = new Map();
+const Notification = require("../models/Notification");
+const Recruiter = require("../models/Recruiter");
+const User = require("../models/User");
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -14,121 +11,123 @@ const asyncHandler = (handler) => async (req, res, next) => {
   }
 };
 
-function currentParticipant(req) {
-  return {
-    id: String(req.user?._id || req.auth?.id || ""),
-    name: req.user?.name || "User",
-    role: req.user?.role || "user",
-  };
-}
+const participantId = (user) => String(user?._id || user?.id || "");
 
-function publicPerson(record, role) {
-  const item = toClient(record);
-  const userId = item.userId ? String(item.userId) : item.id;
-  const status = presence.get(userId);
-  return {
-    id: userId,
-    profileId: item.id,
-    name: item.name,
-    email: item.email,
-    role,
-    avatar: item.avatar,
-    subtitle: role === "recruiter" ? item.companyName || item.companyEmail || "Recruiter" : item.specialization || item.degree || "Candidate",
-    resumeUrl: item.resumeUrl || "",
-    online: Boolean(status?.online),
-    lastSeen: status?.lastSeen || item.updatedAt || item.createdAt || null,
-  };
-}
+const listUsersByRole = asyncHandler(async (req, res) => {
+  const { role, search } = req.query;
+  const allowedRoles = ["recruiter", "candidate", "admin"];
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({ message: "role must be recruiter, candidate, or admin" });
+  }
 
-function emitTo(userId, event, payload) {
-  const res = clients.get(String(userId));
-  if (!res) return;
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(payload)}\n\n`);
-}
+  const filter = { role, status: { $in: ["active", "approved", "pending"] } };
+  if (search) {
+    const regex = new RegExp(String(search), "i");
+    filter.$or = [{ name: regex }, { email: regex }];
+  }
 
-const stream = asyncHandler(async (req, res) => {
-  const participant = currentParticipant(req);
-  presence.set(participant.id, { online: true, lastSeen: new Date().toISOString() });
+  const users = await User.find(filter).select("name email role status lastLoginAt").sort({ name: 1 }).limit(100).lean();
+  if (role !== "recruiter" || users.length === 0) {
+    return res.json(users);
+  }
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders?.();
-  res.write(`event: ready\ndata: ${JSON.stringify({ userId: participant.id })}\n\n`);
-  clients.set(participant.id, res);
+  const userIds = users.map((user) => user._id);
+  const emails = users.map((user) => user.email).filter(Boolean);
+  const recruiters = await Recruiter.find({ $or: [{ userId: { $in: userIds } }, { email: { $in: emails } }] }).lean();
+  const byUserId = new Map(recruiters.map((recruiter) => [String(recruiter.userId), recruiter]));
+  const byEmail = new Map(recruiters.map((recruiter) => [String(recruiter.email || "").toLowerCase(), recruiter]));
 
-  req.on("close", () => {
-    clients.delete(participant.id);
-    presence.set(participant.id, { online: false, lastSeen: new Date().toISOString() });
+  return res.json(users.map((user) => {
+    const recruiter = byUserId.get(String(user._id)) || byEmail.get(String(user.email || "").toLowerCase());
+    return {
+      ...user,
+      avatar: recruiter?.avatar || recruiter?.companyLogoUrl || "",
+      company: recruiter?.companyName || "",
+      companyName: recruiter?.companyName || "",
+      roleInCompany: recruiter?.roleInCompany || recruiter?.role || "Recruiter",
+    };
+  }));
+});
+
+const listConversations = asyncHandler(async (req, res) => {
+  const userId = participantId(req.user);
+  const messages = await Message.find({ $or: [{ senderId: userId }, { recipientId: userId }] }).sort({ createdAt: -1 }).lean();
+  const byUser = new Map();
+
+  messages.forEach((message) => {
+    const otherId = message.senderId === userId ? message.recipientId : message.senderId;
+    if (!byUser.has(otherId)) {
+      byUser.set(otherId, {
+        participantId: otherId,
+        lastMessage: message,
+        unreadCount: 0,
+      });
+    }
+    if (message.recipientId === userId && !message.read) {
+      byUser.get(otherId).unreadCount += 1;
+    }
   });
+
+  return res.json(Array.from(byUser.values()));
 });
 
-const listUsers = asyncHandler(async (req, res) => {
-  const role = req.query.role === "recruiter" ? "recruiter" : "candidate";
-  const search = String(req.query.search || "").trim();
-  const query = search
-    ? { $or: [{ name: new RegExp(search, "i") }, { email: new RegExp(search, "i") }] }
-    : {};
-  const Model = role === "recruiter" ? Recruiter : Candidate;
-  const records = await Model.find(query).limit(100).lean();
-  res.json({ users: records.map((record) => publicPerson(record, role)) });
-});
+const listMessages = asyncHandler(async (req, res) => {
+  const userId = participantId(req.user);
+  const otherId = String(req.query.with || "");
+  if (!otherId) {
+    return res.status(400).json({ message: "with query parameter is required" });
+  }
 
-const conversation = asyncHandler(async (req, res) => {
-  const participant = currentParticipant(req);
-  const otherId = String(req.params.userId);
   const messages = await Message.find({
     $or: [
-      { senderId: participant.id, recipientId: otherId },
-      { senderId: otherId, recipientId: participant.id },
+      { senderId: userId, recipientId: otherId },
+      { senderId: otherId, recipientId: userId },
     ],
-  }).sort({ createdAt: 1 }).limit(250).lean();
+  }).sort({ createdAt: 1 });
 
-  await Message.updateMany({ senderId: otherId, recipientId: participant.id, read: false }, { $set: { read: true } });
-  res.json({ messages: messages.map(toClient) });
+  return res.json(messages);
 });
 
 const sendMessage = asyncHandler(async (req, res) => {
-  const participant = currentParticipant(req);
-  const recipientId = String(req.body.recipientId || "");
-  const content = String(req.body.content || "").trim();
-  if (!recipientId || !content) {
-    return res.status(400).json({ message: "Recipient and message content are required" });
+  const senderId = participantId(req.user);
+  const { recipientId, content, attachments, resumeUrl } = req.body;
+  if (!recipientId || !String(content || "").trim()) {
+    return res.status(400).json({ message: "recipientId and content are required" });
   }
 
   const message = await Message.create({
-    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    senderId: participant.id,
-    senderName: participant.name,
-    senderRole: participant.role,
+    senderId,
+    senderName: req.user.name,
+    senderRole: req.user.role,
     recipientId,
-    content,
-    attachments: Array.isArray(req.body.attachments) ? req.body.attachments : [],
-    resumeShared: Boolean(req.body.resumeShared),
-    timestamp: new Date().toISOString(),
+    content: String(content).trim(),
+    attachments: Array.isArray(attachments) ? attachments : [],
+    resumeUrl,
     read: false,
   });
 
-  const payload = toClient(message);
-  emitTo(recipientId, "message", payload);
-  emitTo(participant.id, "message", payload);
-  res.status(201).json({ message: payload });
+  await Notification.create({
+    userId: recipientId,
+    type: "new_message",
+    title: "New message",
+    message: `${req.user.name} sent you a message.`,
+    metadata: { messageId: message._id, senderId },
+  });
+
+  return res.status(201).json({ message });
 });
 
-const unreadCounts = asyncHandler(async (req, res) => {
-  const participant = currentParticipant(req);
-  const rows = await Message.aggregate([
-    { $match: { recipientId: participant.id, read: false } },
-    { $group: { _id: "$senderId", count: { $sum: 1 } } },
-  ]);
-  res.json({ counts: Object.fromEntries(rows.map((row) => [row._id, row.count])) });
+const markConversationRead = asyncHandler(async (req, res) => {
+  const userId = participantId(req.user);
+  const otherId = String(req.params.participantId || "");
+  await Message.updateMany({ senderId: otherId, recipientId: userId, read: false }, { read: true });
+  return res.json({ message: "Conversation marked as read" });
 });
 
 module.exports = {
-  conversation,
-  listUsers,
+  listConversations,
+  listMessages,
+  listUsersByRole,
+  markConversationRead,
   sendMessage,
-  stream,
-  unreadCounts,
 };

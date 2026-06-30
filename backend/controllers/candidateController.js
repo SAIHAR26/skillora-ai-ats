@@ -3,6 +3,7 @@ const Candidate = require("../models/Candidate");
 const Notification = require("../models/Notification");
 const Resume = require("../models/Resume");
 const Application = require("../models/Application");
+const aiModelService = require("../services/aiModelService");
 const { toClient } = require("../services/platformDataService");
 
 const asyncHandler = (handler) => async (req, res, next) => {
@@ -14,6 +15,10 @@ const asyncHandler = (handler) => async (req, res, next) => {
 };
 
 const candidateFilter = (id) => (mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { id });
+const candidateIdentityFilters = (candidate) => {
+  const values = [candidate._id, String(candidate._id), candidate.id].filter(Boolean);
+  return values.map((value) => ({ candidateId: value }));
+};
 
 const listCandidates = asyncHandler(async (req, res) => {
   const query = req.query.search ? { $text: { $search: req.query.search } } : {};
@@ -94,10 +99,24 @@ const addResume = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
-  const { originalFileName, storageUrl, contentType, fileSize, extractedText, parsedSkills, processed, atsScore, analysis, recommendations } = req.body;
+  const { originalFileName, storageUrl, contentType, fileSize, extractedText } = req.body;
   if (!originalFileName) {
     return res.status(400).json({ message: "Resume file name is required" });
   }
+
+  let analysis = req.body.analysis || {};
+  if (extractedText && String(extractedText).trim()) {
+    analysis = await aiModelService.scoreResume({ resumeText: extractedText });
+  }
+
+  const parsedSkills = Array.isArray(req.body.parsedSkills) && req.body.parsedSkills.length
+    ? req.body.parsedSkills
+    : analysis.skills || analysis.strengths || [];
+  const atsScore = typeof req.body.atsScore === "number" ? req.body.atsScore : analysis.atsScore;
+  const recommendations = Array.isArray(req.body.recommendations) && req.body.recommendations.length
+    ? req.body.recommendations
+    : analysis.suggestions || analysis.resumeImprovements || [];
+  const processed = req.body.processed !== undefined ? req.body.processed : Boolean(analysis.atsScore);
 
   const resume = await Resume.create({
     candidateId: candidate._id,
@@ -110,6 +129,11 @@ const addResume = asyncHandler(async (req, res) => {
     atsScore,
     analysis: analysis || {},
     recommendations: Array.isArray(recommendations) ? recommendations : [],
+    extractedExperience: analysis.experience || {},
+    extractedEducation: analysis.education || {},
+    missingKeywords: analysis.missingKeywords || [],
+    strengths: analysis.strengths || [],
+    weaknesses: analysis.weaknesses || [],
     processed: processed || false,
   });
 
@@ -150,9 +174,7 @@ const getCandidateApplications = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
-  const applications = await Application.find({
-    $or: [{ candidateId: candidate._id }, { candidateId: candidate.id }],
-  }).populate("jobId resumeId").sort({ appliedAt: -1 });
+  const applications = await Application.find({ $or: candidateIdentityFilters(candidate) }).populate("jobId resumeId").sort({ appliedAt: -1 });
   return res.json(applications);
 });
 

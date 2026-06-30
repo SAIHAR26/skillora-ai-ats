@@ -772,8 +772,62 @@ function RecruiterAnalytics() {
 
 // Messages
 function Messages() {
-  const { user } = useAuth();
-  return <MessagingPanel currentUser={user} allowedRoles={["candidate", "recruiter"]} />;
+  const [messages, setMessages] = useState(mockMessages);
+  const [reply, setReply] = useState("");
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reply.trim()) return;
+    const message = {
+      id: `msg-${messages.length + 1}`,
+      senderId: "rec-1",
+      senderName: "You",
+      senderRole: "recruiter",
+      recipientId: "cand-1",
+      content: reply,
+      timestamp: new Date().toISOString(),
+      read: true,
+    };
+    try {
+      const result = await apiRequest<{ message: typeof message }>("/messages", {
+        method: "POST",
+        body: JSON.stringify(message),
+      });
+      setMessages([...messages, result.message]);
+    } catch {
+      setMessages([...messages, message]);
+    }
+    setReply("");
+  };
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
+
+      <div className="dashboard-card" style={{ minHeight: "400px" }}>
+        <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
+          {messages.map((msg) => (
+            <div key={msg.id} className={`flex ${msg.senderRole === "recruiter" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-xl ${msg.senderRole === "recruiter" ? "rounded-br-sm" : "rounded-bl-sm"}`}
+                style={{ background: msg.senderRole === "recruiter" ? "#0071e3" : "#f4f4f4", color: msg.senderRole === "recruiter" ? "white" : "#0a0a0c" }}>
+                <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
+                <p className="text-sm">{msg.content}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <form onSubmit={handleSend} className="flex gap-2 pt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
+          <input value={reply} onChange={(e) => setReply(e.target.value)}
+            placeholder="Type your message..."
+            className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none"
+            style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
+            <Send size={16} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 // Contact Admin

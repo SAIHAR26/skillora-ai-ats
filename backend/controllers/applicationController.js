@@ -124,6 +124,15 @@ exports.listApplications = async (req, res) => {
   const { candidateId, recruiterId, jobId, status, search, candidateName, skills, skill, experience, location } = req.query;
   const filters = {};
 
+  if (candidateId) {
+    const candidate = await Candidate.findOne(idFilter(candidateId)).select("_id id");
+    if (!candidate) {
+      return res.json([]);
+    }
+    const ids = [candidate._id, String(candidate._id), candidate.id].filter(Boolean);
+    filters.$or = ids.map((id) => ({ candidateId: id }));
+  }
+  if (jobId) filters.jobId = jobId;
   if (req.user?.role === "candidate") {
     const candidate = await getCandidateForUser(req.user);
     if (!candidate) return res.status(404).json({ message: "Candidate profile not found" });
