@@ -1,7 +1,7 @@
 import { applyPlatformSnapshot } from "../data/mockData";
 import type { PlatformSnapshot } from "../data/mockData";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 export interface AuthUser {
   id: string;
@@ -71,4 +71,15 @@ export async function fetchDatabaseReport() {
     emptyCollections: string[];
     dataQualityIssues: string[];
   }>("/platform/database-report");
+}
+
+export async function fetchSystemSettings() {
+  return apiRequest<Record<string, unknown>>("/platform/settings");
+}
+
+export async function saveSystemSettings(payload: Record<string, unknown>) {
+  return apiRequest<Record<string, unknown>>("/platform/settings", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }

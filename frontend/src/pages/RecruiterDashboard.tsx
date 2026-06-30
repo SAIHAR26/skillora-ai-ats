@@ -35,12 +35,12 @@ import {
   mockCandidates,
   mockApplications,
   mockInterviews,
-  mockMessages,
 } from "../data/mockData";
 import type { Job, Application } from "../data/mockData";
 import { fetchAiRankings, fetchAiTrainingSummary } from "../services/aiRanking";
 import type { AiRanking, AiTrainingSummary } from "../services/aiRanking";
 import { apiRequest } from "../services/platformApi";
+import { MessagingPanel } from "../components/MessagingPanel";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -184,66 +184,101 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
 // Job Management
 function JobManagement() {
   const { user } = useAuth();
-  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email) || mockRecruiters[0];
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
+  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [newJob, setNewJob] = useState({ title: "", description: "", skills: "", experience: "", salary: "", location: "", type: "Remote", deadline: "" });
+
+  useEffect(() => {
+    let cancelled = false;
+    apiRequest<{ jobs: Job[] }>("/platform/jobs?mine=true")
+      .then((result) => {
+        if (!cancelled) setJobs(result.jobs);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const recruiterIds = [user?.id, currentRecruiter?.id].filter(Boolean);
+          setJobs(mockJobs.filter((job) => !job.recruiterId || recruiterIds.includes(job.recruiterId)));
+          setError(err instanceof Error ? err.message : "Could not load recruiter jobs");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentRecruiter?.id, user?.id]);
 
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
-    const job: Job = {
-      id: `job-${jobs.length + 1}`,
+    setError("");
+    const skills = newJob.skills.split(",").map((s) => s.trim()).filter(Boolean);
+    const job: Partial<Job> = {
       title: newJob.title,
       description: newJob.description,
       company: currentRecruiter?.companyName || "",
       location: newJob.location,
-      type: newJob.type as "Remote" | "Hybrid" | "On-site",
+      type: newJob.type,
       salary: newJob.salary,
-      skills: newJob.skills.split(",").map((s) => s.trim()),
+      skills,
       experience: newJob.experience,
       deadline: newJob.deadline,
       status: "active",
-      applications: 0,
-      shortlisted: 0,
-      interviewed: 0,
-      hired: 0,
-      postedDate: new Date().toISOString().split("T")[0],
     };
     try {
       const result = await apiRequest<{ job: Job }>("/platform/jobs", {
         method: "POST",
         body: JSON.stringify(job),
       });
-      setJobs([...jobs, result.job]);
-    } catch {
-      setJobs([...jobs, job]);
+      setJobs((current) => [result.job, ...current]);
+      setShowForm(false);
+      setNewJob({ title: "", description: "", skills: "", experience: "", salary: "", location: "", type: "Remote", deadline: "" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create job");
     }
-    setShowForm(false);
-    setNewJob({ title: "", description: "", skills: "", experience: "", salary: "", location: "", type: "Remote", deadline: "" });
   };
 
   const handleStatusChange = async (id: string, status: Job["status"]) => {
+    setError("");
     try {
       const result = await apiRequest<{ job: Job }>(`/platform/jobs/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
-      setJobs(jobs.map((j) => (j.id === id ? result.job : j)));
-    } catch {
-      setJobs(jobs.map((j) => (j.id === id ? { ...j, status } : j)));
+      setJobs((current) => current.map((j) => (j.id === id ? result.job : j)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update job");
+    }
+  };
+
+  const handleDeleteJob = async (id: string) => {
+    setError("");
+    try {
+      await apiRequest(`/platform/jobs/${id}`, { method: "DELETE" });
+      setJobs((current) => current.filter((job) => job.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete job");
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Job Management</h1>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Job Management</h1>
+          {loading && <p className="text-xs mt-1" style={{ color: "#6c6c6c" }}>Loading your jobs...</p>}
+        </div>
         <button onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-80"
           style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
           <Plus size={16} /> {showForm ? "Cancel" : "Post New Job"}
         </button>
       </div>
+
+      {error && <div className="dashboard-card text-sm" style={{ color: "#e74c3c" }}>{error}</div>}
 
       {showForm && (
         <form onSubmit={handleCreateJob} className="dashboard-card space-y-4">
@@ -286,7 +321,7 @@ function JobManagement() {
           </div>
           <div className="grid md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Required Skills (comma-separated)</label>
+              <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Required Skills</label>
               <input value={newJob.skills} onChange={(e) => setNewJob({ ...newJob, skills: e.target.value })} placeholder="React, TypeScript, Node.js"
                 className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
             </div>
@@ -311,22 +346,14 @@ function JobManagement() {
               <span className={`status-badge status-${job.status}`}>{job.status}</span>
             </div>
             <div className="grid grid-cols-4 gap-4 mb-4">
-              <div className="text-center p-3 rounded-lg" style={{ background: "#f4f4f4" }}>
-                <p className="text-lg font-bold" style={{ color: "#0a0a0c" }}>{job.applications}</p>
-                <p className="text-xs" style={{ color: "#6c6c6c" }}>Applied</p>
-              </div>
-              <div className="text-center p-3 rounded-lg" style={{ background: "#e8f0fe" }}>
-                <p className="text-lg font-bold" style={{ color: "#0071e3" }}>{job.shortlisted}</p>
-                <p className="text-xs" style={{ color: "#6c6c6c" }}>Shortlisted</p>
-              </div>
-              <div className="text-center p-3 rounded-lg" style={{ background: "#fff3cd" }}>
-                <p className="text-lg font-bold" style={{ color: "#856404" }}>{job.interviewed}</p>
-                <p className="text-xs" style={{ color: "#6c6c6c" }}>Interviewed</p>
-              </div>
-              <div className="text-center p-3 rounded-lg" style={{ background: "#d4edda" }}>
-                <p className="text-lg font-bold" style={{ color: "#155724" }}>{job.hired}</p>
-                <p className="text-xs" style={{ color: "#6c6c6c" }}>Hired</p>
-              </div>
+              {[
+                ["Applied", job.applications], ["Shortlisted", job.shortlisted], ["Interviewed", job.interviewed], ["Hired", job.hired],
+              ].map(([label, value]) => (
+                <div key={label} className="text-center p-3 rounded-lg" style={{ background: "#f4f4f4" }}>
+                  <p className="text-lg font-bold" style={{ color: "#0a0a0c" }}>{value}</p>
+                  <p className="text-xs" style={{ color: "#6c6c6c" }}>{label}</p>
+                </div>
+              ))}
             </div>
             <div className="flex gap-2">
               <button onClick={() => handleStatusChange(job.id, "paused")} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "#fff3cd", color: "#856404" }}>
@@ -335,17 +362,17 @@ function JobManagement() {
               <button onClick={() => handleStatusChange(job.id, "closed")} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "#f8d7da", color: "#721c24" }}>
                 <XCircle size={12} /> Close
               </button>
-              <button className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "#f8d7da", color: "#721c24" }}>
+              <button onClick={() => handleDeleteJob(job.id)} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: "#f8d7da", color: "#721c24" }}>
                 <Trash2 size={12} /> Delete
               </button>
             </div>
           </div>
         ))}
+        {!loading && jobs.length === 0 && <div className="dashboard-card text-center text-sm" style={{ color: "#6c6c6c" }}>No jobs posted under your recruiter account yet.</div>}
       </div>
     </div>
   );
 }
-
 // Application Management
 function ApplicationManagement() {
   const [applications] = useState<Application[]>(mockApplications);
@@ -898,61 +925,84 @@ function ContactAdmin() {
 // Settings
 function SettingsPage() {
   const { user } = useAuth();
-  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email) || mockRecruiters[0];
+  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email);
+  const [form, setForm] = useState({
+    name: currentRecruiter?.name || user?.name || "",
+    email: currentRecruiter?.email || user?.email || "",
+    companyName: currentRecruiter?.companyName || "",
+    phone: currentRecruiter?.phone || "",
+  });
+  const [status, setStatus] = useState("");
+
+  const saveProfile = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setStatus("Saving...");
+    try {
+      if (currentRecruiter?.id) {
+        await apiRequest(`/recruiters/${currentRecruiter.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(form),
+        });
+      }
+      await apiRequest("/auth/profile", {
+        method: "PUT",
+        body: JSON.stringify({ name: form.name, email: form.email }),
+      });
+      setStatus("Profile saved successfully.");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not save profile");
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Settings</h1>
 
-      <div className="dashboard-card space-y-4">
+      <form onSubmit={saveProfile} className="dashboard-card space-y-4">
         <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>Profile Information</h3>
         <div className="grid md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Name</label>
-            <input defaultValue={currentRecruiter?.name || user?.name || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Email</label>
-            <input defaultValue={currentRecruiter?.email || user?.email || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Company</label>
-            <input defaultValue={currentRecruiter?.companyName || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
           <div>
             <label className="block text-xs font-medium mb-1" style={{ color: "#6c6c6c" }}>Phone</label>
-            <input defaultValue={currentRecruiter?.phone || ""} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
           </div>
         </div>
-        <button className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>Save Changes</button>
-      </div>
+        <div className="flex items-center gap-3">
+          <button type="submit" className="px-6 py-2 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>Save Changes</button>
+          {status && <span className="text-sm" style={{ color: status.includes("success") ? "#155724" : "#6c6c6c" }}>{status}</span>}
+        </div>
+      </form>
 
       <div className="dashboard-card space-y-4">
         <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>Account Settings</h3>
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium" style={{ color: "#0a0a0c" }}>Email Notifications</p>
-              <p className="text-xs" style={{ color: "#6c6c6c" }}>Receive email alerts for new applications</p>
+          {["Email Notifications", "Interview Reminders"].map((label) => (
+            <div key={label} className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium" style={{ color: "#0a0a0c" }}>{label}</p>
+                <p className="text-xs" style={{ color: "#6c6c6c" }}>Enabled for your recruiter account</p>
+              </div>
+              <button className="w-12 h-6 rounded-full relative" style={{ background: "#0071e3" }} type="button">
+                <div className="w-5 h-5 rounded-full absolute top-0.5 right-0.5" style={{ background: "white" }} />
+              </button>
             </div>
-            <button className="w-12 h-6 rounded-full relative" style={{ background: "#0071e3" }}>
-              <div className="w-5 h-5 rounded-full absolute top-0.5 right-0.5" style={{ background: "white" }} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium" style={{ color: "#0a0a0c" }}>Interview Reminders</p>
-              <p className="text-xs" style={{ color: "#6c6c6c" }}>Get reminded before scheduled interviews</p>
-            </div>
-            <button className="w-12 h-6 rounded-full relative" style={{ background: "#0071e3" }}>
-              <div className="w-5 h-5 rounded-full absolute top-0.5 right-0.5" style={{ background: "white" }} />
-            </button>
-          </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
-
 // Main Recruiter Dashboard
 export default function RecruiterDashboard() {
   const { user } = useAuth();
@@ -1010,3 +1060,9 @@ export default function RecruiterDashboard() {
     </div>
   );
 }
+
+
+
+
+
+
