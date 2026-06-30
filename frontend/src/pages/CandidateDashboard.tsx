@@ -19,13 +19,14 @@ import {
   Search,
   Send,
   Settings,
+  Plus,
   Star,
   Target,
   Upload,
   XCircle,
   Zap,
 } from "lucide-react";
-import { fetchSkillGap, recommendJobs, scoreResume } from "../services/aiRanking";
+import { fetchSkillGap, recommendJobs } from "../services/aiRanking";
 import type { JobRecommendation, ResumeScoreResult, SkillGapResult } from "../services/aiRanking";
 import { apiRequest } from "../services/platformApi";
 
@@ -121,7 +122,19 @@ type Message = {
   read?: boolean;
 };
 
+type Recipient = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  company?: string;
+  companyName?: string;
+  avatar?: string;
+};
+
 const candidateKey = (candidate?: Candidate | null) => candidate?._id || candidate?.id || "";
+const recipientKey = (recipient?: Recipient | null) => recipient?._id || recipient?.id || "";
 const jobKey = (job?: Job | null) => job?._id || job?.id || "";
 const jobSkills = (job: Job) => job.skillsRequired?.length ? job.skillsRequired : job.skills || [];
 const statusLabel = (value?: string) => (value || "applied").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -264,22 +277,16 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
       }
       const fileText = await file.text();
       if (!fileText.trim()) throw new Error("The uploaded resume did not contain extractable text.");
-      const result = await scoreResume(fileText);
-      await apiRequest(`/candidates/${candidateKey(candidate)}/resumes`, {
+      const result = await apiRequest<{ resume: { analysis?: ResumeScoreResult; atsScore?: number } }>(`/candidates/${candidateKey(candidate)}/resumes`, {
         method: "POST",
         body: JSON.stringify({
           originalFileName: file.name,
           contentType: file.type || "text/plain",
           fileSize: file.size,
           extractedText: fileText,
-          parsedSkills: result.strengths,
-          atsScore: result.atsScore,
-          analysis: result,
-          recommendations: result.suggestions,
-          processed: true,
         }),
       });
-      setAnalysis(result);
+      setAnalysis(result.resume.analysis || null);
       setUploaded(true);
       await refresh();
     } catch (caught) {
@@ -292,8 +299,11 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
   };
 
   const atsScore = analysis?.atsScore ?? candidate?.atsScore ?? 0;
-  const strengths = analysis?.strengths || candidate?.skills || [];
+  const detectedSkills = analysis?.skills || candidate?.skills || [];
+  const strengths = analysis?.strengths || [];
+  const weaknesses = analysis?.weaknesses || [];
   const suggestions = analysis?.suggestions || [];
+  const atsBreakdown = analysis?.atsBreakdown || {};
 
   return (
     <div className="space-y-6">
@@ -323,11 +333,26 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
           <div className="grid md:grid-cols-2 gap-6">
             <div className="dashboard-card">
               <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><CheckCircle size={18} style={{ color: "#3dc75a" }} /> Extracted Skills</h3>
-              {strengths.length ? strengths.map((skill) => <p key={skill} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{skill}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No skills extracted yet.</p>}
+              {detectedSkills.length ? detectedSkills.map((skill) => <p key={skill} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{skill}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No skills extracted yet.</p>}
             </div>
             <div className="dashboard-card">
               <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><Zap size={18} style={{ color: "#f5a623" }} /> Recommendations</h3>
               {suggestions.length ? suggestions.map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>Upload a resume to generate recommendations.</p>}
+            </div>
+          </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            {Object.entries(atsBreakdown).filter(([, value]) => typeof value === "number").map(([key, value]) => (
+              <StatCard key={key} title={statusLabel(key)} value={`${value}%`} icon={<Target size={20} />} color="#0071e3" />
+            ))}
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><CheckCircle size={18} style={{ color: "#3dc75a" }} /> Strengths</h3>
+              {strengths.length ? strengths.map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No strengths detected yet.</p>}
+            </div>
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><XCircle size={18} style={{ color: "#e74c3c" }} /> Weaknesses</h3>
+              {weaknesses.length ? weaknesses.map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No major weaknesses detected.</p>}
             </div>
           </div>
         </>
@@ -527,6 +552,20 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
             <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><BookOpen size={18} style={{ color: "#0071e3" }} /> Improvement Suggestions</h3>
             {gap.learningPath.map((item) => <p key={item.step} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item.step}. {item.title} ({item.duration})</p>)}
           </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Resume Improvements</h3>
+              {(gap.resumeImprovements || []).map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>)}
+            </div>
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Interview Prep</h3>
+              {(gap.interviewPreparationTips || []).map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>)}
+            </div>
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Certifications</h3>
+              {(gap.suggestedCertifications || []).map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>)}
+            </div>
+          </div>
         </>
       )}
     </div>
@@ -536,14 +575,44 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
 function Messages({ candidate }: { candidate: Candidate | null }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [reply, setReply] = useState("");
-  const [recipientId, setRecipientId] = useState("");
+  const [recipientType, setRecipientType] = useState<"recruiter" | "admin">("recruiter");
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
+  const [showChooser, setShowChooser] = useState(false);
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!showChooser) return;
+    const params = new URLSearchParams({ role: recipientType });
+    if (search.trim()) params.set("search", search.trim());
+    apiRequest<Recipient[]>(`/messages/users?${params.toString()}`)
+      .then(setRecipients)
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load recipients."));
+  }, [recipientType, search, showChooser]);
+
+  const startChat = async (recipient: Recipient) => {
+    const id = recipientKey(recipient);
+    if (!id) return;
+    setSelectedRecipient(recipient);
+    setShowChooser(false);
+    setError("");
+    try {
+      const history = await apiRequest<Message[]>(`/messages?with=${id}`);
+      setMessages(history);
+      await apiRequest(`/messages/conversations/${id}/read`, { method: "PATCH" });
+    } catch (caught) {
+      setMessages([]);
+      setError(caught instanceof Error ? caught.message : "Unable to load conversation.");
+    }
+  };
 
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!reply.trim() || !recipientId.trim() || !candidateKey(candidate)) return;
+    const recipientId = recipientKey(selectedRecipient);
+    if (!reply.trim() || !recipientId || !candidateKey(candidate)) return;
     try {
-      const result = await apiRequest<{ message: Message }>("/platform/messages", {
+      const result = await apiRequest<{ message: Message }>("/messages", {
         method: "POST",
         body: JSON.stringify({
           senderId: candidateKey(candidate),
@@ -562,14 +631,43 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
+    <div className="space-y-6 relative">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
+        <button onClick={() => setShowChooser(true)} className="h-11 w-11 rounded-full flex items-center justify-center shadow-sm" style={{ background: "#0a0a0c", color: "#f2f0e6" }} title="Start conversation">
+          <Plus size={20} />
+        </button>
+      </div>
+      {showChooser && (
+        <div className="dashboard-card space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {(["recruiter", "admin"] as const).map((role) => (
+              <button key={role} onClick={() => setRecipientType(role)} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: recipientType === role ? "#0a0a0c" : "#f4f4f4", color: recipientType === role ? "#f2f0e6" : "#0a0a0c" }}>{role === "recruiter" ? "Recruiters" : "Admin"}</button>
+            ))}
+          </div>
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or email" className="w-full px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <div className="grid md:grid-cols-2 gap-3">
+            {recipients.map((recipient) => (
+              <div key={recipientKey(recipient)} className="p-4 rounded-lg flex items-center gap-3" style={{ border: "1px solid #e5e5e5", background: "white" }}>
+                <div className="w-11 h-11 rounded-full flex items-center justify-center overflow-hidden" style={{ background: "#e8f0fe", color: "#0071e3" }}>
+                  {recipient.avatar ? <img src={recipient.avatar} alt={recipient.name || "Recipient"} className="w-full h-full object-cover" /> : (recipient.name || recipient.email || "U").slice(0, 1)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate" style={{ color: "#0a0a0c" }}>{recipient.name || recipient.email}</p>
+                  <p className="text-xs truncate" style={{ color: "#6c6c6c" }}>{recipient.companyName || recipient.company || recipient.role}</p>
+                </div>
+                <button onClick={() => startChat(recipient)} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ background: "#0071e3", color: "white" }}>Start Chat</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="dashboard-card" style={{ minHeight: 400 }}>
-        <input value={recipientId} onChange={(e) => setRecipientId(e.target.value)} placeholder="Recipient user ID" className="w-full mb-4 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+        {selectedRecipient && <p className="text-sm font-medium mb-4" style={{ color: "#0a0a0c" }}>Chat with {selectedRecipient.name || selectedRecipient.email}</p>}
         <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
           {messages.length === 0 ? <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No conversation selected from MongoDB yet.</p> : messages.map((msg) => (
-            <div key={msg._id || msg.id} className="flex justify-end">
-              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl rounded-br-sm" style={{ background: "#0071e3", color: "white" }}>
+            <div key={msg._id || msg.id} className={`flex ${msg.senderId === candidateKey(candidate) ? "justify-end" : "justify-start"}`}>
+              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl" style={{ background: msg.senderId === candidateKey(candidate) ? "#0071e3" : "#f4f4f4", color: msg.senderId === candidateKey(candidate) ? "white" : "#0a0a0c" }}>
                 <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
                 <p className="text-sm">{msg.content}</p>
               </div>
@@ -578,8 +676,8 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
         </div>
         {error && <p className="text-sm mb-3" style={{ color: "#b91c1c" }}>{error}</p>}
         <form onSubmit={handleSend} className="flex gap-2 pt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
-          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Type your message" className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}><Send size={16} /></button>
+          <input value={reply} onChange={(e) => setReply(e.target.value)} disabled={!selectedRecipient} placeholder={selectedRecipient ? "Type your message" : "Choose a recipient first"} className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none disabled:opacity-60" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <button type="submit" disabled={!selectedRecipient} className="px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60" style={{ background: "#0a0a0c", color: "#f2f0e6" }}><Send size={16} /></button>
         </form>
       </div>
     </div>

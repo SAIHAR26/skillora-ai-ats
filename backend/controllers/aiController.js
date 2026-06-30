@@ -1,4 +1,8 @@
 const aiModelService = require("../services/aiModelService");
+const {
+  getCandidateRecommendations,
+  getCandidateSkillGap,
+} = require("../services/candidateInsightService");
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -30,6 +34,19 @@ const classifyResume = asyncHandler(async (req, res) => {
 });
 
 const recommendJobs = asyncHandler(async (req, res) => {
+  const candidateId = req.body.candidateId || req.body.cvId;
+  if (candidateId && candidateId !== "0") {
+    const result = await getCandidateRecommendations(candidateId, req.body.limit);
+    res.json({
+      ...result,
+      candidate: {
+        ...result.candidate,
+        cvId: result.candidate.id,
+      },
+    });
+    return;
+  }
+
   const result = await aiModelService.recommendJobs(req.body);
   res.json(result);
 });
@@ -40,6 +57,13 @@ const predictSelection = asyncHandler(async (req, res) => {
 });
 
 const skillGap = asyncHandler(async (req, res) => {
+  const candidateId = req.body.candidateId || req.body.cvId;
+  if (candidateId && candidateId !== "0") {
+    const result = await getCandidateSkillGap(candidateId, req.body.jobId);
+    res.json(result);
+    return;
+  }
+
   const result = await aiModelService.skillGap(req.body);
   res.json(result);
 });

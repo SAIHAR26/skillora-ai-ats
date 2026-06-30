@@ -762,7 +762,7 @@ function Messages() {
       read: true,
     };
     try {
-      const result = await apiRequest<{ message: typeof message }>("/platform/messages", {
+      const result = await apiRequest<{ message: typeof message }>("/messages", {
         method: "POST",
         body: JSON.stringify(message),
       });

@@ -34,6 +34,13 @@ export interface ResumeScoreResult {
   selectionProbability: number;
   recommendation: string;
   classification: string | null;
+  skills?: string[];
+  matchedKeywords?: string[];
+  missingKeywords?: string[];
+  sectionDetection?: Record<string, boolean>;
+  atsBreakdown?: Record<string, number | null>;
+  experience?: { years?: number; projectSignals?: number };
+  education?: { level?: string; degrees?: string[] };
   breakdown: {
     skillsMatch: number;
     experienceYears: number;
@@ -42,7 +49,12 @@ export interface ResumeScoreResult {
     educationLevel: string;
   };
   strengths: string[];
+  weaknesses?: string[];
   suggestions: string[];
+  resumeImprovements?: string[];
+  interviewPreparationTips?: string[];
+  suggestedCertifications?: string[];
+  careerRecommendations?: string[];
 }
 
 export interface JobRecommendation {
@@ -53,6 +65,12 @@ export interface JobRecommendation {
   industry: string;
   location: string;
   reason: string;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  resumeImprovements?: string[];
+  interviewPreparationTips?: string[];
+  suggestedCertifications?: string[];
+  careerRecommendations?: string[];
 }
 
 export interface SkillGapResult {
@@ -60,6 +78,10 @@ export interface SkillGapResult {
   matched: { skill: string; level: number }[];
   missing: { skill: string; recommended: string }[];
   learningPath: { step: number; title: string; duration: string; type: string }[];
+  resumeImprovements?: string[];
+  interviewPreparationTips?: string[];
+  suggestedCertifications?: string[];
+  careerRecommendations?: string[];
 }
 
 export interface ModelStatus {

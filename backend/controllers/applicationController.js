@@ -75,7 +75,14 @@ exports.listApplications = async (req, res) => {
   const { candidateId, recruiterId, jobId, status } = req.query;
   const filters = {};
 
-  if (candidateId) filters.candidateId = candidateId;
+  if (candidateId) {
+    const candidate = await Candidate.findOne(idFilter(candidateId)).select("_id id");
+    if (!candidate) {
+      return res.json([]);
+    }
+    const ids = [candidate._id, String(candidate._id), candidate.id].filter(Boolean);
+    filters.$or = ids.map((id) => ({ candidateId: id }));
+  }
   if (jobId) filters.jobId = jobId;
   if (status) filters.status = status;
 
