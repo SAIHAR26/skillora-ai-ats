@@ -73,6 +73,29 @@ export async function fetchDatabaseReport() {
   }>("/platform/database-report");
 }
 
+export async function uploadFormData<T>(path: string, formData: FormData) {
+  const token = localStorage.getItem("skillora_token");
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let details: ApiErrorResponse = {};
+    try {
+      details = await response.json();
+    } catch {
+      details = {};
+    }
+    throw new Error(details.message || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export async function fetchSystemSettings() {
   return apiRequest<Record<string, unknown>>("/platform/settings");
 }
@@ -82,4 +105,8 @@ export async function saveSystemSettings(payload: Record<string, unknown>) {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+export async function uploadResume(candidateId: string, formData: FormData) {
+  return uploadFormData<{ message: string; resume: { analysis?: unknown; atsScore?: number } }>(`/candidates/${candidateId}/resumes`, formData);
 }

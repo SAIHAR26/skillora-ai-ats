@@ -90,52 +90,36 @@ export interface ModelStatus {
   report: Record<string, unknown>;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
-    ...init,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
-}
+import { apiRequest } from "./platformApi";
 
 export async function fetchAiRankings(limit = 25) {
-  return requestJson<{ rankings: AiRanking[]; model?: string }>(`/ai/rankings?limit=${limit}`);
+  return apiRequest<{ rankings: AiRanking[]; model?: string }>(`/ai/rankings?limit=${limit}`);
 }
 
 export async function fetchAiTrainingSummary() {
-  return requestJson<AiTrainingSummary>("/ai/training-summary");
+  return apiRequest<AiTrainingSummary>("/ai/training-summary");
 }
 
 export async function fetchModelStatus() {
-  return requestJson<ModelStatus>("/ai/model-status");
+  return apiRequest<ModelStatus>("/ai/model-status");
 }
 
 export async function scoreResume(resumeText: string) {
-  return requestJson<ResumeScoreResult>("/ai/score-resume", {
+  return apiRequest<ResumeScoreResult>("/ai/score-resume", {
     method: "POST",
     body: JSON.stringify({ resumeText }),
   });
 }
 
 export async function recommendJobs(cvId = "0", limit = 5) {
-  return requestJson<{ candidate: { cvId: string; name: string; desiredJob: string }; recommendations: JobRecommendation[] }>("/ai/recommend-jobs", {
+  return apiRequest<{ candidate: { cvId: string; name: string; desiredJob: string }; recommendations: JobRecommendation[] }>("/ai/recommend-jobs", {
     method: "POST",
     body: JSON.stringify({ cvId, limit }),
   });
 }
 
 export async function fetchSkillGap(cvId = "0") {
-  return requestJson<SkillGapResult>("/ai/skill-gap", {
+  return apiRequest<SkillGapResult>("/ai/skill-gap", {
     method: "POST",
     body: JSON.stringify({ cvId }),
   });

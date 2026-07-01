@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 require("dotenv").config();
 
 const connectDB = require("./config/db");
@@ -16,7 +17,6 @@ const applicationRoutes = require("./routes/applications");
 const interviewRoutes = require("./routes/interviews");
 const notificationRoutes = require("./routes/notifications");
 const complaintRoutes = require("./routes/complaints");
-const messageRoutes = require("./routes/messageRoutes");
 const platformRoutes = require("./routes/platformRoutes");
 const aiRoutes = require("./routes/aiRoutes");
 
@@ -39,6 +39,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // DB connect
 connectDB();

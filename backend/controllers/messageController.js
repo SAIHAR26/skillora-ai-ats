@@ -27,8 +27,10 @@ const listUsersByRole = asyncHandler(async (req, res) => {
   }
 
   const users = await User.find(filter).select("name email role status lastLoginAt").sort({ name: 1 }).limit(100).lean();
+  const enhancedUsers = role === "recruiter" && users.length > 0 ? users : users;
+
   if (role !== "recruiter" || users.length === 0) {
-    return res.json(users);
+    return res.json({ users: enhancedUsers });
   }
 
   const userIds = users.map((user) => user._id);
@@ -37,7 +39,7 @@ const listUsersByRole = asyncHandler(async (req, res) => {
   const byUserId = new Map(recruiters.map((recruiter) => [String(recruiter.userId), recruiter]));
   const byEmail = new Map(recruiters.map((recruiter) => [String(recruiter.email || "").toLowerCase(), recruiter]));
 
-  return res.json(users.map((user) => {
+  return res.json({ users: users.map((user) => {
     const recruiter = byUserId.get(String(user._id)) || byEmail.get(String(user.email || "").toLowerCase());
     return {
       ...user,
@@ -46,7 +48,7 @@ const listUsersByRole = asyncHandler(async (req, res) => {
       companyName: recruiter?.companyName || "",
       roleInCompany: recruiter?.roleInCompany || recruiter?.role || "Recruiter",
     };
-  }));
+  }) });
 });
 
 const listConversations = asyncHandler(async (req, res) => {
@@ -73,9 +75,9 @@ const listConversations = asyncHandler(async (req, res) => {
 
 const listMessages = asyncHandler(async (req, res) => {
   const userId = participantId(req.user);
-  const otherId = String(req.query.with || "");
+  const otherId = String(req.params.participantId || req.query.with || "");
   if (!otherId) {
-    return res.status(400).json({ message: "with query parameter is required" });
+    return res.status(400).json({ message: "participantId path parameter or with query parameter is required" });
   }
 
   const messages = await Message.find({
@@ -83,9 +85,9 @@ const listMessages = asyncHandler(async (req, res) => {
       { senderId: userId, recipientId: otherId },
       { senderId: otherId, recipientId: userId },
     ],
-  }).sort({ createdAt: 1 });
+  }).sort({ createdAt: 1 }).lean();
 
-  return res.json(messages);
+  return res.json({ messages });
 });
 
 const sendMessage = asyncHandler(async (req, res) => {
@@ -117,6 +119,36 @@ const sendMessage = asyncHandler(async (req, res) => {
   return res.status(201).json({ message });
 });
 
+const unreadCounts = asyncHandler(async (req, res) => {
+  const userId = participantId(req.user);
+  const unread = await Message.aggregate([
+    { $match: { recipientId: userId, read: false } },
+    { $group: { _id: "$senderId", count: { $sum: 1 } } },
+  ]);
+  const counts = unread.reduce((acc, item) => ({ ...acc, [String(item._id)]: item.count }), {});
+  res.json({ counts });
+});
+
+const stream = asyncHandler(async (req, res) => {
+  const userId = participantId(req.user);
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  res.flushHeaders();
+  res.write(`retry: 10000\n\n`);
+
+  const interval = setInterval(async () => {
+    const messages = await Message.find({ recipientId: userId, read: false }).sort({ createdAt: 1 }).lean();
+    if (messages.length > 0) {
+      res.write(`data: ${JSON.stringify(messages)}\n\n`);
+    }
+  }, 10000);
+
+  req.on("close", () => clearInterval(interval));
+});
+
 const markConversationRead = asyncHandler(async (req, res) => {
   const userId = participantId(req.user);
   const otherId = String(req.params.participantId || "");
@@ -130,4 +162,6 @@ module.exports = {
   listUsersByRole,
   markConversationRead,
   sendMessage,
+  unreadCounts,
+  stream,
 };

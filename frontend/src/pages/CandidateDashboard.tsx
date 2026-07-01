@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { fetchSkillGap, recommendJobs } from "../services/aiRanking";
 import type { JobRecommendation, ResumeScoreResult, SkillGapResult } from "../services/aiRanking";
-import { apiRequest } from "../services/platformApi";
+import { apiRequest, uploadResume } from "../services/platformApi";
 
 type Candidate = {
   _id?: string;
@@ -272,20 +272,15 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
     setAnalyzing(true);
     setError("");
     try {
-      if (!file.type.startsWith("text/") && !file.name.toLowerCase().endsWith(".txt")) {
-        throw new Error("Only text resumes can be analyzed until server-side PDF/DOCX extraction is configured.");
+      const allowedExtensions = [".txt", ".pdf", ".docx"];
+      const extension = file.name ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase() : "";
+      if (!allowedExtensions.includes(extension)) {
+        throw new Error("Only .txt, .pdf, and .docx resume files are supported.");
       }
-      const fileText = await file.text();
-      if (!fileText.trim()) throw new Error("The uploaded resume did not contain extractable text.");
-      const result = await apiRequest<{ resume: { analysis?: ResumeScoreResult; atsScore?: number } }>(`/candidates/${candidateKey(candidate)}/resumes`, {
-        method: "POST",
-        body: JSON.stringify({
-          originalFileName: file.name,
-          contentType: file.type || "text/plain",
-          fileSize: file.size,
-          extractedText: fileText,
-        }),
-      });
+
+      const formData = new FormData();
+      formData.append("resume", file);
+      const result = await uploadResume(candidateKey(candidate), formData);
       setAnalysis(result.resume.analysis || null);
       setUploaded(true);
       await refresh();
@@ -310,11 +305,11 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Resume Analyzer</h1>
       <div className="dashboard-card">
         <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all hover:border-blue-400" style={{ borderColor: "#e5e5e5" }}>
-          <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden" onChange={handleFileChange} />
+          <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx" className="hidden" onChange={handleFileChange} />
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#e8f0fe" }}>
             <Upload size={28} style={{ color: "#0071e3" }} />
           </div>
-          <h3 className="text-lg font-semibold mb-2" style={{ color: "#0a0a0c" }}>{analyzing ? "Analyzing your resume..." : "Upload a text resume"}</h3>
+          <h3 className="text-lg font-semibold mb-2" style={{ color: "#0a0a0c" }}>{analyzing ? "Analyzing your resume..." : "Upload your resume file"}</h3>
           <p className="text-sm" style={{ color: "#6c6c6c" }}>ATS scoring uses the trained ML endpoint and stores the result in MongoDB.</p>
         </div>
         {error && <p className="text-sm mt-3" style={{ color: "#b91c1c" }}>{error}</p>}
@@ -586,8 +581,8 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
     if (!showChooser) return;
     const params = new URLSearchParams({ role: recipientType });
     if (search.trim()) params.set("search", search.trim());
-    apiRequest<Recipient[]>(`/messages/users?${params.toString()}`)
-      .then(setRecipients)
+    apiRequest<{ users: Recipient[] }>(`/messages/users?${params.toString()}`)
+      .then((result) => setRecipients(result.users))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load recipients."));
   }, [recipientType, search, showChooser]);
 
@@ -598,8 +593,8 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
     setShowChooser(false);
     setError("");
     try {
-      const history = await apiRequest<Message[]>(`/messages?with=${id}`);
-      setMessages(history);
+      const history = await apiRequest<{ messages: Message[] }>(`/messages/conversations/${id}`);
+      setMessages(history.messages);
       await apiRequest(`/messages/conversations/${id}/read`, { method: "PATCH" });
     } catch (caught) {
       setMessages([]);
