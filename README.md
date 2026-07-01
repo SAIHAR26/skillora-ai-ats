@@ -91,6 +91,4 @@ The system provides dedicated portals for **Administrators, Recruiters, and Cand
 * ✅ Recruiter, Candidate & Admin Modules Implemented
 * 🔄 Final Module Testing & Validation in Progress
 
----
 
-**Skillora aims to make recruitment faster, smarter, and more efficient by combining modern web technologies with Artificial Intelligence and Machine Learning.**
