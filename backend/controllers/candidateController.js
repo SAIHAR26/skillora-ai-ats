@@ -1,4 +1,8 @@
+const fs = require("fs/promises");
+const path = require("path");
 const mongoose = require("mongoose");
+const pdfParse = require("pdf-parse");
+const mammoth = require("mammoth");
 const Candidate = require("../models/Candidate");
 const Notification = require("../models/Notification");
 const Resume = require("../models/Resume");
@@ -93,19 +97,55 @@ const updateCandidate = asyncHandler(async (req, res) => {
   return res.json({ message: "Candidate profile updated", candidate: toClient(candidate) });
 });
 
+async function extractTextFromFile(file) {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  const buffer = file.buffer;
+  if (!buffer || !buffer.length) {
+    return "";
+  }
+  if (extension === ".pdf" || file.mimetype === "application/pdf") {
+    const parsed = await pdfParse(buffer);
+    return parsed.text || "";
+  }
+  if (extension === ".docx" || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const parsed = await mammoth.extractRawText({ buffer });
+    return parsed.value || "";
+  }
+  if (extension === ".txt" || file.mimetype === "text/plain") {
+    return buffer.toString("utf8");
+  }
+  throw new Error("Unsupported resume format. Upload a .txt, .pdf, or .docx file.");
+}
+
 const addResume = asyncHandler(async (req, res) => {
   const candidate = await Candidate.findOne(candidateFilter(req.params.id));
   if (!candidate) {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
-  const { originalFileName, storageUrl, contentType, fileSize, extractedText } = req.body;
+  const isFileUpload = Boolean(req.file);
+  const originalFileName = req.file?.originalname || req.body.originalFileName;
+  const contentType = req.file?.mimetype || req.body.contentType;
+  const fileSize = req.file?.size || Number(req.body.fileSize) || 0;
+  let storageUrl = req.body.storageUrl || "";
+  let extractedText = String(req.body.extractedText || "").trim();
+
   if (!originalFileName) {
     return res.status(400).json({ message: "Resume file name is required" });
   }
 
+  if (isFileUpload) {
+    extractedText = await extractTextFromFile(req.file);
+    const uploadDir = path.resolve(__dirname, "..", "uploads", "resumes");
+    await fs.mkdir(uploadDir, { recursive: true });
+    const safeName = `${candidate._id || candidate.id}-${Date.now()}${path.extname(originalFileName)}`;
+    const storagePath = path.join(uploadDir, safeName);
+    await fs.writeFile(storagePath, req.file.buffer);
+    storageUrl = `/uploads/resumes/${safeName}`;
+  }
+
   let analysis = req.body.analysis || {};
-  if (extractedText && String(extractedText).trim()) {
+  if (extractedText) {
     analysis = await aiModelService.scoreResume({ resumeText: extractedText });
   }
 
@@ -121,7 +161,7 @@ const addResume = asyncHandler(async (req, res) => {
   const resume = await Resume.create({
     candidateId: candidate._id,
     originalFileName,
-    storageUrl: storageUrl || "",
+    storageUrl,
     contentType,
     fileSize,
     extractedText,

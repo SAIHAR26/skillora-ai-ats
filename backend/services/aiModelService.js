@@ -2,10 +2,11 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 const pythonScript = path.resolve(__dirname, "..", "ml", "predict.py");
+const pythonCommand = process.platform === "win32" ? "py" : "python";
 
 function runModelTask(task, payload = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn("python", [pythonScript, "--task", task], {
+    const child = spawn(pythonCommand, [pythonScript, "--task", task], {
       cwd: path.resolve(__dirname, "..", ".."),
       env: {
         ...process.env,

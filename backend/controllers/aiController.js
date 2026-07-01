@@ -3,7 +3,7 @@ const Application = require("../models/Application");
 const Candidate = require("../models/Candidate");
 const Job = require("../models/Job");
 const Resume = require("../models/Resume");
-const { getRecruiterForUser, idVariants } = require("../services/accessControl");
+const { getRecruiterForUser, getCandidateForUser, idVariants } = require("../services/accessControl");
 const mongoose = require("mongoose");
 
 const asyncHandler = (handler) => async (req, res, next) => {
@@ -144,8 +144,19 @@ function scoreJobForCandidate(candidate, job) {
   };
 }
 
+async function resolveCandidateId(req) {
+  if (req.body?.candidateId || req.body?.cvId || req.query?.candidateId) {
+    return req.body?.candidateId || req.body?.cvId || req.query?.candidateId;
+  }
+  if (req.user?.role === "candidate") {
+    const candidate = await getCandidateForUser(req.user);
+    return candidate ? (candidate._id || candidate.id) : undefined;
+  }
+  return undefined;
+}
+
 const recommendJobs = asyncHandler(async (req, res) => {
-  const candidateId = req.body.candidateId || req.body.cvId;
+  const candidateId = await resolveCandidateId(req);
   if (candidateId && candidateId !== "0") {
     const result = await getCandidateRecommendations(candidateId, req.body.limit);
     res.json({
@@ -156,34 +167,6 @@ const recommendJobs = asyncHandler(async (req, res) => {
       },
     });
     return;
-  const candidateId = req.body.candidateId || req.query.candidateId;
-  if (candidateId || req.user?.role === "candidate") {
-    const candidate = candidateId
-      ? await Candidate.findOne({ $or: [mongoose.Types.ObjectId.isValid(candidateId) ? { _id: candidateId } : { id: candidateId }, { id: candidateId }] }).lean()
-      : await Candidate.findOne({ $or: [{ userId: req.user._id }, { email: req.user.email }] }).lean();
-    if (!candidate) return res.status(404).json({ message: "Candidate profile not found" });
-
-    const limit = Number.parseInt(req.body.limit || req.query.limit, 10) || 10;
-    const jobs = await Job.find({ published: true, active: true, status: { $in: ["open", "active"] } }).lean();
-    const recommendations = jobs
-      .map((job) => {
-        const result = scoreJobForCandidate(candidate, job);
-        return {
-          jobId: String(job._id),
-          title: job.title,
-          company: job.company,
-          matchScore: result.score,
-          location: job.location,
-          industry: job.industry,
-          matchedSkills: result.matched,
-          missingSkills: result.missing,
-          reason: "Matched from live MongoDB job requirements and candidate profile skills.",
-        };
-      })
-      .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, limit);
-
-    return res.json({ candidate: { id: String(candidate._id), name: candidate.name }, recommendations, source: "mongodb" });
   }
 
   const result = await aiModelService.recommendJobs(req.body);
@@ -196,7 +179,7 @@ const predictSelection = asyncHandler(async (req, res) => {
 });
 
 const skillGap = asyncHandler(async (req, res) => {
-  const candidateId = req.body.candidateId || req.body.cvId;
+  const candidateId = await resolveCandidateId(req);
   if (candidateId && candidateId !== "0") {
     const result = await getCandidateSkillGap(candidateId, req.body.jobId);
     res.json(result);
