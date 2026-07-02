@@ -1,9 +1,14 @@
+const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 
 exports.getNotifications = async (req, res) => {
   const filters = {};
   if (req.user?.role === "admin" && req.query.userId) {
-    filters.userId = req.query.userId;
+    const userId = String(req.query.userId);
+    filters.userId = { $in: [userId] };
+    if (/^[a-f\d]{24}$/i.test(userId)) {
+      filters.userId.$in.push(mongoose.Types.ObjectId(userId));
+    }
   } else if (req.user) {
     filters.userId = req.user._id;
   }

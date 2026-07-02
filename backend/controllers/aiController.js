@@ -3,6 +3,7 @@ const Application = require("../models/Application");
 const Candidate = require("../models/Candidate");
 const Job = require("../models/Job");
 const Resume = require("../models/Resume");
+const { getCandidateRecommendations, getCandidateSkillGap } = require("../services/candidateInsightService");
 const { getRecruiterForUser, getCandidateForUser, idVariants } = require("../services/accessControl");
 const mongoose = require("mongoose");
 
@@ -155,18 +156,32 @@ async function resolveCandidateId(req) {
   return undefined;
 }
 
+function candidateFilter(id) {
+  if (!id) return { _id: null };
+  return mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id };
+}
+
+const loadCandidateContext = async (candidateId) => {
+  const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+  if (!candidate) return { candidate: null, resume: null };
+  const resume = await Resume.findOne({ candidateId: candidate._id }).sort({ createdAt: -1 }).lean();
+  return { candidate, resume };
+};
+
 const recommendJobs = asyncHandler(async (req, res) => {
   const candidateId = await resolveCandidateId(req);
   if (candidateId && candidateId !== "0") {
-    const result = await getCandidateRecommendations(candidateId, req.body.limit);
-    res.json({
-      ...result,
-      candidate: {
-        ...result.candidate,
-        cvId: result.candidate.id,
-      },
-    });
-    return;
+    const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+    if (candidate) {
+      const fallback = await getCandidateRecommendations(candidateId, req.body.limit);
+      return res.json({
+        ...fallback,
+        candidate: {
+          ...fallback.candidate,
+          cvId: String(candidateId),
+        },
+      });
+    }
   }
 
   const result = await aiModelService.recommendJobs(req.body);
@@ -181,9 +196,11 @@ const predictSelection = asyncHandler(async (req, res) => {
 const skillGap = asyncHandler(async (req, res) => {
   const candidateId = await resolveCandidateId(req);
   if (candidateId && candidateId !== "0") {
-    const result = await getCandidateSkillGap(candidateId, req.body.jobId);
-    res.json(result);
-    return;
+    const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+    if (candidate) {
+      const result = await getCandidateSkillGap(candidateId, req.body.jobId);
+      return res.json(result);
+    }
   }
 
   const result = await aiModelService.skillGap(req.body);
