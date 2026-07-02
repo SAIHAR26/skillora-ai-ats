@@ -437,7 +437,12 @@ function AIRecommendations({ candidate }: { candidate: Candidate | null }) {
   const [recommendations, setRecommendations] = useState<JobRecommendation[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
-    recommendJobs(candidateKey(candidate) || "0", 10)
+    const candidateId = candidateKey(candidate);
+    if (!candidateId) {
+      setRecommendations([]);
+      return;
+    }
+    recommendJobs(candidateId, 10)
       .then((result) => setRecommendations(result.recommendations || []))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load recommendations."));
   }, [candidate]);
@@ -522,7 +527,12 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
   const [gap, setGap] = useState<SkillGapResult | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    fetchSkillGap(candidateKey(candidate) || "0")
+    const candidateId = candidateKey(candidate);
+    if (!candidateId) {
+      setGap(null);
+      return;
+    }
+    fetchSkillGap(candidateId)
       .then(setGap)
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load skill gap analysis."));
   }, [candidate]);
@@ -779,23 +789,9 @@ export default function CandidateDashboard() {
       const id = candidateKey(current);
       const userId = current.userId || user?.id || id;
       const [apps, ints, notifs] = await Promise.all([
-        apiRequest<Application[]>(`/applications?candidateId=${id}`),
-        apiRequest<Interview[]>(`/interviews?candidateId=${id}`),
-        apiRequest<Notification[]>(`/notifications?userId=${userId}`),
-      ]);
-      setApplications(apps);
-      setInterviews(ints);
-      setNotifications(notifs);
-    } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : "Unable to load candidate data.");
-    }
-  };
-
-  useEffect(() => {
-    void refresh();
-  }, []);
-
-  const renderContent = () => {
+            apiRequest<Application[]>(`/applications?candidateId=${encodeURIComponent(id)}`),
+            apiRequest<Interview[]>(`/interviews?candidateId=${encodeURIComponent(id)}`),
+            apiRequest<Notification[]>(`/notifications?userId=${encodeURIComponent(userId)}`),
     switch (activeTab) {
       case "dashboard": return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
       case "resume": return <ResumeAnalyzer candidate={candidate} refresh={refresh} />;

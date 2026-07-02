@@ -9,6 +9,7 @@ const Resume = require("../models/Resume");
 const Application = require("../models/Application");
 const aiModelService = require("../services/aiModelService");
 const { toClient } = require("../services/platformDataService");
+const { getCandidateRecommendations } = require("../services/candidateInsightService");
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -23,6 +24,15 @@ const candidateIdentityFilters = (candidate) => {
   const values = [candidate._id, String(candidate._id), candidate.id].filter(Boolean);
   return values.map((value) => ({ candidateId: value }));
 };
+
+function calculateProfileCompletion(candidate) {
+  const fields = ["name", "email", "phone", "location", "college", "degree", "skills", "resumeUrl"];
+  const completed = fields.reduce((count, field) => {
+    const value = candidate[field];
+    return count + ((Array.isArray(value) ? value.length > 0 : Boolean(value)) ? 1 : 0);
+  }, 0);
+  return Math.round((completed / fields.length) * 100);
+}
 
 const listCandidates = asyncHandler(async (req, res) => {
   const query = req.query.search ? { $text: { $search: req.query.search } } : {};
@@ -93,7 +103,20 @@ const updateCandidate = asyncHandler(async (req, res) => {
     }
   });
 
+  const beforeCompletion = calculateProfileCompletion(candidate);
   await candidate.save();
+  const afterCompletion = calculateProfileCompletion(candidate);
+
+  if (beforeCompletion < 100 && afterCompletion === 100) {
+    await Notification.create({
+      userId: candidate.userId || candidate._id,
+      type: "profile_completed",
+      title: "Profile completed",
+      message: "Your candidate profile is now complete.",
+      metadata: { candidateId: candidate._id },
+    });
+  }
+
   return res.json({ message: "Candidate profile updated", candidate: toClient(candidate) });
 });
 
@@ -158,6 +181,8 @@ const addResume = asyncHandler(async (req, res) => {
     : analysis.suggestions || analysis.resumeImprovements || [];
   const processed = req.body.processed !== undefined ? req.body.processed : Boolean(analysis.atsScore);
 
+  const previousAts = typeof candidate.atsScore === "number" ? candidate.atsScore : 0;
+
   const resume = await Resume.create({
     candidateId: candidate._id,
     originalFileName,
@@ -185,15 +210,26 @@ const addResume = asyncHandler(async (req, res) => {
   }
   await candidate.save();
 
-  await Notification.create({
-    userId: candidate.userId || candidate._id,
-    type: processed ? "resume_analyzed" : "resume_uploaded",
-    title: processed ? "Resume analyzed" : "Resume uploaded",
-    message: processed && typeof atsScore === "number"
-      ? `Your resume was analyzed with an ATS score of ${atsScore}%.`
-      : "Your resume metadata was saved.",
-    metadata: { resumeId: resume._id, atsScore },
-  });
+  if (typeof atsScore === "number" && atsScore > previousAts) {
+    await Notification.create({
+      userId: candidate.userId || candidate._id,
+      type: "ats_score_improved",
+      title: "ATS score improved",
+      message: `Your latest resume analysis improved your ATS score to ${atsScore}%.`,
+      metadata: { resumeId: resume._id, atsScore, previousAts },
+    });
+  }
+
+  const matchingJobs = await getCandidateRecommendations(candidate._id, 3);
+  if (Array.isArray(matchingJobs.recommendations) && matchingJobs.recommendations.length > 0) {
+    await Notification.create({
+      userId: candidate.userId || candidate._id,
+      type: "new_matching_job",
+      title: "New matching jobs available",
+      message: `We found ${matchingJobs.recommendations.length} new jobs matching your updated resume.`,
+      metadata: { resumeId: resume._id, jobIds: matchingJobs.recommendations.map((job) => job.jobId) },
+    });
+  }
 
   return res.status(201).json({ message: "Resume metadata saved", resume });
 });
