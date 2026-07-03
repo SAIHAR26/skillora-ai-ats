@@ -139,7 +139,7 @@ const jobKey = (job?: Job | null) => job?._id || job?.id || "";
 const jobSkills = (job: Job) => job.skillsRequired?.length ? job.skillsRequired : job.skills || [];
 const statusLabel = (value?: string) => (value || "applied").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString() : "Not scheduled";
-const profileFields = ["name", "email", "phone", "location", "college", "degree", "skills", "resumeUrl"] as const;
+const profileFields = ["name", "email", "phone", "location", "college", "degree", "skills", "avatar", "resumeUrl"] as const;
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -578,6 +578,7 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
 }
 
 function Messages({ candidate }: { candidate: Candidate | null }) {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [reply, setReply] = useState("");
   const [recipientType, setRecipientType] = useState<"recruiter" | "admin">("recruiter");
@@ -586,6 +587,8 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
   const [showChooser, setShowChooser] = useState(false);
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+
+  const currentUserId = user?.id || "";
 
   useEffect(() => {
     if (!showChooser) return;
@@ -615,14 +618,14 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
     const recipientId = recipientKey(selectedRecipient);
-    if (!reply.trim() || !recipientId || !candidateKey(candidate)) return;
+    if (!reply.trim() || !recipientId || !currentUserId) return;
     try {
       const result = await apiRequest<{ message: Message }>("/messages", {
         method: "POST",
         body: JSON.stringify({
-          senderId: candidateKey(candidate),
-          senderName: candidate?.name || "Candidate",
-          senderRole: "candidate",
+          senderId: currentUserId,
+          senderName: user?.name || candidate?.name || "Candidate",
+          senderRole: user?.role || "candidate",
           recipientId,
           content: reply,
           read: false,
@@ -670,14 +673,17 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
       <div className="dashboard-card" style={{ minHeight: 400 }}>
         {selectedRecipient && <p className="text-sm font-medium mb-4" style={{ color: "#0a0a0c" }}>Chat with {selectedRecipient.name || selectedRecipient.email}</p>}
         <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
-          {messages.length === 0 ? <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No conversation selected from MongoDB yet.</p> : messages.map((msg) => (
-            <div key={msg._id || msg.id} className={`flex ${msg.senderId === candidateKey(candidate) ? "justify-end" : "justify-start"}`}>
-              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl" style={{ background: msg.senderId === candidateKey(candidate) ? "#0071e3" : "#f4f4f4", color: msg.senderId === candidateKey(candidate) ? "white" : "#0a0a0c" }}>
-                <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
-                <p className="text-sm">{msg.content}</p>
+          {messages.length === 0 ? <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No conversation selected from MongoDB yet.</p> : messages.map((msg) => {
+            const mine = msg.senderId === currentUserId;
+            return (
+              <div key={msg._id || msg.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl" style={{ background: mine ? "#0071e3" : "#f4f4f4", color: mine ? "white" : "#0a0a0c" }}>
+                  <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
+                  <p className="text-sm">{msg.content}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         {error && <p className="text-sm mb-3" style={{ color: "#b91c1c" }}>{error}</p>}
         <form onSubmit={handleSend} className="flex gap-2 pt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
@@ -749,6 +755,7 @@ function SettingsPage({ candidate, refresh }: { candidate: Candidate | null; ref
             ["college", "College/University"],
             ["degree", "Degree"],
             ["specialization", "Specialization"],
+            ["avatar", "Profile Photo URL"],
             ["linkedin", "LinkedIn"],
             ["github", "GitHub"],
             ["experienceLevel", "Experience Level"],
@@ -787,23 +794,57 @@ export default function CandidateDashboard() {
       const current = await apiRequest<Candidate>("/candidates/me/profile");
       setCandidate(current);
       const id = candidateKey(current);
+      if (!id) {
+        setApplications([]);
+        setInterviews([]);
+        setNotifications([]);
+        return;
+      }
+
       const userId = current.userId || user?.id || id;
       const [apps, ints, notifs] = await Promise.all([
-            apiRequest<Application[]>(`/applications?candidateId=${encodeURIComponent(id)}`),
-            apiRequest<Interview[]>(`/interviews?candidateId=${encodeURIComponent(id)}`),
-            apiRequest<Notification[]>(`/notifications?userId=${encodeURIComponent(userId)}`),
+        apiRequest<Application[]>(`/applications?candidateId=${encodeURIComponent(id)}`),
+        apiRequest<Interview[]>(`/interviews?candidateId=${encodeURIComponent(id)}`),
+        apiRequest<Notification[]>(`/notifications?userId=${encodeURIComponent(userId)}`),
+      ]);
+      setApplications(apps);
+      setInterviews(ints);
+      setNotifications(notifs);
+    } catch (caught) {
+      setLoadError(caught instanceof Error ? caught.message : "Unable to load candidate dashboard data.");
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id || user?.email) {
+      void refresh();
+    }
+  }, [user?.id, user?.email]);
+
+  const renderContent = () => {
     switch (activeTab) {
-      case "dashboard": return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
-      case "resume": return <ResumeAnalyzer candidate={candidate} refresh={refresh} />;
-      case "jobs": return <JobSearch candidate={candidate} applications={applications} refresh={refresh} />;
-      case "recommendations": return <AIRecommendations candidate={candidate} />;
-      case "applications": return <MyApplications applications={applications} />;
-      case "interviews": return <InterviewCenter interviews={interviews} />;
-      case "skillgap": return <SkillGapAnalysis candidate={candidate} />;
-      case "messages": return <Messages candidate={candidate} />;
-      case "notifications": return <NotificationsPage notifications={notifications} />;
-      case "settings": return <SettingsPage candidate={candidate} refresh={refresh} />;
-      default: return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
+      case "dashboard":
+        return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
+      case "resume":
+        return <ResumeAnalyzer candidate={candidate} refresh={refresh} />;
+      case "jobs":
+        return <JobSearch candidate={candidate} applications={applications} refresh={refresh} />;
+      case "recommendations":
+        return <AIRecommendations candidate={candidate} />;
+      case "applications":
+        return <MyApplications applications={applications} />;
+      case "interviews":
+        return <InterviewCenter interviews={interviews} />;
+      case "skillgap":
+        return <SkillGapAnalysis candidate={candidate} />;
+      case "messages":
+        return <Messages candidate={candidate} />;
+      case "notifications":
+        return <NotificationsPage notifications={notifications} />;
+      case "settings":
+        return <SettingsPage candidate={candidate} refresh={refresh} />;
+      default:
+        return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
     }
   };
 
