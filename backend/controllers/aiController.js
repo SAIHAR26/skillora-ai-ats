@@ -170,22 +170,23 @@ const loadCandidateContext = async (candidateId) => {
 
 const recommendJobs = asyncHandler(async (req, res) => {
   const candidateId = await resolveCandidateId(req);
-  if (candidateId && candidateId !== "0") {
-    const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
-    if (candidate) {
-      const fallback = await getCandidateRecommendations(candidateId, req.body.limit);
-      return res.json({
-        ...fallback,
-        candidate: {
-          ...fallback.candidate,
-          cvId: String(candidateId),
-        },
-      });
-    }
+  if (!candidateId || candidateId === "0") {
+    return res.status(400).json({ message: "Candidate ID is required for job recommendations" });
   }
 
-  const result = await aiModelService.recommendJobs(req.body);
-  res.json(result);
+  const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+  if (!candidate) {
+    return res.status(404).json({ message: "Candidate not found" });
+  }
+
+  const result = await getCandidateRecommendations(candidateId, req.body.limit);
+  res.json({
+    ...result,
+    candidate: {
+      ...result.candidate,
+      cvId: String(candidateId),
+    },
+  });
 });
 
 const predictSelection = asyncHandler(async (req, res) => {
@@ -195,15 +196,16 @@ const predictSelection = asyncHandler(async (req, res) => {
 
 const skillGap = asyncHandler(async (req, res) => {
   const candidateId = await resolveCandidateId(req);
-  if (candidateId && candidateId !== "0") {
-    const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
-    if (candidate) {
-      const result = await getCandidateSkillGap(candidateId, req.body.jobId);
-      return res.json(result);
-    }
+  if (!candidateId || candidateId === "0") {
+    return res.status(400).json({ message: "Candidate ID is required for skill gap analysis" });
   }
 
-  const result = await aiModelService.skillGap(req.body);
+  const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+  if (!candidate) {
+    return res.status(404).json({ message: "Candidate not found" });
+  }
+
+  const result = await getCandidateSkillGap(candidateId, req.body.jobId);
   res.json(result);
 });
 

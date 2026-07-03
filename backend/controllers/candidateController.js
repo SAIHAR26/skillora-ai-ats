@@ -93,6 +93,7 @@ const updateCandidate = asyncHandler(async (req, res) => {
     "workPreference",
     "linkedin",
     "github",
+    "avatar",
     "resumeUrl",
     "status",
   ];
