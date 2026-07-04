@@ -1,5 +1,6 @@
 import { applyPlatformSnapshot } from "../data/mockData";
 import type { PlatformSnapshot } from "../data/mockData";
+import type { ResumeScoreResult } from "./aiRanking";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
@@ -108,5 +109,5 @@ export async function saveSystemSettings(payload: Record<string, unknown>) {
 }
 
 export async function uploadResume(candidateId: string, formData: FormData) {
-  return uploadFormData<{ message: string; resume: { analysis?: unknown; atsScore?: number } }>(`/candidates/${candidateId}/resumes`, formData);
+  return uploadFormData<{ message: string; resume: { analysis?: ResumeScoreResult; atsScore?: number } }>(`/candidates/${candidateId}/resumes`, formData);
 }

@@ -59,14 +59,21 @@ export interface ResumeScoreResult {
 
 export interface JobRecommendation {
   jobId: string;
+  id?: string;
   title: string;
   company: string;
   matchScore: number;
+  modelScore?: number;
+  profileScore?: number;
+  source?: string;
+  model?: string;
   industry: string;
   location: string;
   reason: string;
   matchedSkills?: string[];
   missingSkills?: string[];
+  matchedKeywords?: string[];
+  missingKeywords?: string[];
   resumeImprovements?: string[];
   interviewPreparationTips?: string[];
   suggestedCertifications?: string[];
@@ -111,16 +118,16 @@ export async function scoreResume(resumeText: string) {
   });
 }
 
-export async function recommendJobs(cvId = "0", limit = 5) {
+export async function recommendJobs(candidateId = "0", limit = 5) {
   return apiRequest<{ candidate: { cvId: string; name: string; desiredJob: string }; recommendations: JobRecommendation[] }>("/ai/recommend-jobs", {
     method: "POST",
-    body: JSON.stringify({ cvId, limit }),
+    body: JSON.stringify({ candidateId, limit }),
   });
 }
 
-export async function fetchSkillGap(cvId = "0") {
+export async function fetchSkillGap(candidateId = "0") {
   return apiRequest<SkillGapResult>("/ai/skill-gap", {
     method: "POST",
-    body: JSON.stringify({ cvId }),
+    body: JSON.stringify({ candidateId }),
   });
 }
