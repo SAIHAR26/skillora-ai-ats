@@ -46,6 +46,7 @@ type Candidate = {
   cgpa?: number;
   linkedin?: string;
   github?: string;
+  avatar?: string;
   skills?: string[];
   preferredJobTypes?: string[];
   experienceLevel?: string;
@@ -442,6 +443,7 @@ function AIRecommendations({ candidate }: { candidate: Candidate | null }) {
       setRecommendations([]);
       return;
     }
+    setError("");
     recommendJobs(candidateId, 10)
       .then((result) => setRecommendations(result.recommendations || []))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load recommendations."));
@@ -457,8 +459,18 @@ function AIRecommendations({ candidate }: { candidate: Candidate | null }) {
               <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{rec.title}</h3>
               <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{rec.company} | {rec.location}</p>
               <p className="text-sm mt-3" style={{ color: "#0a0a0c" }}>{rec.reason}</p>
+              {(rec.matchedSkills?.length || rec.missingSkills?.length) && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {(rec.matchedSkills || []).slice(0, 5).map((skill) => <span key={`matched-${rec.jobId}-${skill}`} className="px-2 py-1 rounded-full text-xs" style={{ background: "#e8f7ee", color: "#166534" }}>{skill}</span>)}
+                  {(rec.missingSkills || []).slice(0, 5).map((skill) => <span key={`missing-${rec.jobId}-${skill}`} className="px-2 py-1 rounded-full text-xs" style={{ background: "#fff3cd", color: "#8a5a00" }}>{skill}</span>)}
+                </div>
+              )}
             </div>
-            <span className="px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "#e8f0fe", color: "#0071e3" }}>{rec.matchScore}%</span>
+            <div className="text-right shrink-0">
+              <span className="px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "#e8f0fe", color: "#0071e3" }}>{rec.matchScore}%</span>
+              {rec.modelScore !== undefined && <p className="text-xs mt-2" style={{ color: "#6c6c6c" }}>Model {rec.modelScore}%</p>}
+              {rec.profileScore !== undefined && <p className="text-xs" style={{ color: "#6c6c6c" }}>Profile {rec.profileScore}%</p>}
+            </div>
           </div>
         </div>
       ))}

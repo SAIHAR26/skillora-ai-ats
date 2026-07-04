@@ -19,6 +19,30 @@ function serializeSkills(value) {
   return Array.isArray(value) ? value.join(", ") : String(value || "");
 }
 
+function mixedDocumentFilter(value) {
+  const variants = idVariants(value);
+  const objectIds = variants.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+  const filters = [{ id: { $in: variants.map(String) } }];
+  if (objectIds.length) filters.push({ _id: { $in: objectIds } });
+  return { $or: filters };
+}
+
+function applicationIdsFilter(values) {
+  const ids = Array.isArray(values) ? values : String(values || "").split(",");
+  const variants = ids.flatMap((id) => idVariants(String(id).trim())).filter(Boolean);
+  if (!variants.length) return null;
+
+  const objectIds = variants.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+  const filters = [{ id: { $in: variants.map(String) } }];
+  if (objectIds.length) filters.push({ _id: { $in: objectIds } });
+  return { $or: filters };
+}
+
+function intersectIds(left = [], right = []) {
+  const allowed = new Set(right.flatMap(idVariants).map(String));
+  return left.filter((id) => allowed.has(String(id)));
+}
+
 function buildResumeText(candidate, resume, job) {
   return [
     resume?.extractedText,
@@ -33,9 +57,9 @@ function buildResumeText(candidate, resume, job) {
 
 async function scoreApplication(application) {
   const [candidate, job, resume] = await Promise.all([
-    Candidate.findById(application.candidateId).lean(),
-    Job.findById(application.jobId).lean(),
-    application.resumeId ? Resume.findById(application.resumeId).lean() : null,
+    Candidate.findOne(mixedDocumentFilter(application.candidateId)).lean(),
+    Job.findOne(mixedDocumentFilter(application.jobId)).lean(),
+    application.resumeId && mongoose.Types.ObjectId.isValid(String(application.resumeId)) ? Resume.findById(application.resumeId).lean() : null,
   ]);
 
   const resumeText = buildResumeText(candidate, resume, job);
@@ -91,15 +115,19 @@ const getRankings = asyncHandler(async (req, res) => {
   const filters = {};
 
   if (req.query.jobId) filters.jobId = { $in: idVariants(req.query.jobId) };
+  const appFilter = applicationIdsFilter(req.query.applicationIds || req.body?.applicationIds);
+  if (appFilter) filters.$and = [...(filters.$and || []), appFilter];
 
   if (req.user?.role === "recruiter") {
     const recruiter = await getRecruiterForUser(req.user);
     if (!recruiter) return res.status(404).json({ message: "Recruiter profile not found" });
     const jobs = await Job.find({ recruiterId: { $in: idVariants(recruiter._id).concat(idVariants(recruiter.id)) } }).select("_id id");
-    filters.jobId = { $in: jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id))) };
+    const ownedJobIds = jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id)));
+    filters.jobId = { $in: filters.jobId?.$in ? intersectIds(ownedJobIds, filters.jobId.$in) : ownedJobIds };
   } else if (req.query.recruiterId) {
     const jobs = await Job.find({ recruiterId: { $in: idVariants(req.query.recruiterId) } }).select("_id id");
-    filters.jobId = { $in: jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id))) };
+    const recruiterJobIds = jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id)));
+    filters.jobId = { $in: filters.jobId?.$in ? intersectIds(recruiterJobIds, filters.jobId.$in) : recruiterJobIds };
   }
 
   const applications = await Application.find(filters).sort({ appliedAt: -1 }).limit(Math.max(limit, 1));
@@ -113,11 +141,19 @@ const getRankings = asyncHandler(async (req, res) => {
 
 const rankCandidates = asyncHandler(async (req, res) => {
   if (req.body?.applicationIds || req.body?.jobId || req.body?.recruiterId) {
-    req.query = { ...req.query, jobId: req.body.jobId, recruiterId: req.body.recruiterId, limit: req.body.limit };
+    req.query = { ...req.query, applicationIds: req.body.applicationIds, jobId: req.body.jobId, recruiterId: req.body.recruiterId, limit: req.body.limit };
     return getRankings(req, res);
   }
-  const result = await aiModelService.rankCandidates(req.body);
-  res.json(result);
+  try {
+    const result = await aiModelService.rankCandidates(req.body);
+    res.json(result);
+  } catch (error) {
+    if (!String(error.message || "").includes("applications.csv")) {
+      throw error;
+    }
+    req.query = { ...req.query, limit: req.body?.limit };
+    return getRankings(req, res);
+  }
 });
 
 const scoreResume = asyncHandler(async (req, res) => {
