@@ -3,7 +3,8 @@ const Application = require("../models/Application");
 const Candidate = require("../models/Candidate");
 const Job = require("../models/Job");
 const Resume = require("../models/Resume");
-const { getRecruiterForUser, idVariants } = require("../services/accessControl");
+const { getCandidateRecommendations, getCandidateSkillGap } = require("../services/candidateInsightService");
+const { getRecruiterForUser, getCandidateForUser, idVariants } = require("../services/accessControl");
 const mongoose = require("mongoose");
 const idFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
 
@@ -17,6 +18,30 @@ const asyncHandler = (handler) => async (req, res, next) => {
 
 function serializeSkills(value) {
   return Array.isArray(value) ? value.join(", ") : String(value || "");
+}
+
+function mixedDocumentFilter(value) {
+  const variants = idVariants(value);
+  const objectIds = variants.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+  const filters = [{ id: { $in: variants.map(String) } }];
+  if (objectIds.length) filters.push({ _id: { $in: objectIds } });
+  return { $or: filters };
+}
+
+function applicationIdsFilter(values) {
+  const ids = Array.isArray(values) ? values : String(values || "").split(",");
+  const variants = ids.flatMap((id) => idVariants(String(id).trim())).filter(Boolean);
+  if (!variants.length) return null;
+
+  const objectIds = variants.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+  const filters = [{ id: { $in: variants.map(String) } }];
+  if (objectIds.length) filters.push({ _id: { $in: objectIds } });
+  return { $or: filters };
+}
+
+function intersectIds(left = [], right = []) {
+  const allowed = new Set(right.flatMap(idVariants).map(String));
+  return left.filter((id) => allowed.has(String(id)));
 }
 
 function buildResumeText(candidate, resume, job) {
@@ -33,9 +58,9 @@ function buildResumeText(candidate, resume, job) {
 
 async function scoreApplication(application) {
   const [candidate, job, resume] = await Promise.all([
-    Candidate.findOne(idFilter(application.candidateId)).lean(),
-    Job.findOne(idFilter(application.jobId)).lean(),
-    application.resumeId ? Resume.findById(application.resumeId).lean() : null,
+    Candidate.findOne(mixedDocumentFilter(application.candidateId)).lean(),
+    Job.findOne(mixedDocumentFilter(application.jobId)).lean(),
+    application.resumeId && mongoose.Types.ObjectId.isValid(String(application.resumeId)) ? Resume.findById(application.resumeId).lean() : null,
   ]);
 
   const resumeText = buildResumeText(candidate, resume, job);
@@ -91,15 +116,19 @@ const getRankings = asyncHandler(async (req, res) => {
   const filters = {};
 
   if (req.query.jobId) filters.jobId = { $in: idVariants(req.query.jobId) };
+  const appFilter = applicationIdsFilter(req.query.applicationIds || req.body?.applicationIds);
+  if (appFilter) filters.$and = [...(filters.$and || []), appFilter];
 
   if (req.user?.role === "recruiter") {
     const recruiter = await getRecruiterForUser(req.user);
     if (!recruiter) return res.status(404).json({ message: "Recruiter profile not found" });
     const jobs = await Job.find({ recruiterId: { $in: idVariants(recruiter._id).concat(idVariants(recruiter.id)) } }).select("_id id");
-    filters.jobId = { $in: jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id))) };
+    const ownedJobIds = jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id)));
+    filters.jobId = { $in: filters.jobId?.$in ? intersectIds(ownedJobIds, filters.jobId.$in) : ownedJobIds };
   } else if (req.query.recruiterId) {
     const jobs = await Job.find({ recruiterId: { $in: idVariants(req.query.recruiterId) } }).select("_id id");
-    filters.jobId = { $in: jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id))) };
+    const recruiterJobIds = jobs.flatMap((job) => idVariants(job._id).concat(idVariants(job.id)));
+    filters.jobId = { $in: filters.jobId?.$in ? intersectIds(recruiterJobIds, filters.jobId.$in) : recruiterJobIds };
   }
 
   const applications = await Application.find(filters).sort({ appliedAt: -1 }).limit(Math.max(limit, 1));
@@ -113,11 +142,19 @@ const getRankings = asyncHandler(async (req, res) => {
 
 const rankCandidates = asyncHandler(async (req, res) => {
   if (req.body?.applicationIds || req.body?.jobId || req.body?.recruiterId) {
-    req.query = { ...req.query, jobId: req.body.jobId, recruiterId: req.body.recruiterId, limit: req.body.limit };
+    req.query = { ...req.query, applicationIds: req.body.applicationIds, jobId: req.body.jobId, recruiterId: req.body.recruiterId, limit: req.body.limit };
     return getRankings(req, res);
   }
-  const result = await aiModelService.rankCandidates(req.body);
-  res.json(result);
+  try {
+    const result = await aiModelService.rankCandidates(req.body);
+    res.json(result);
+  } catch (error) {
+    if (!String(error.message || "").includes("applications.csv")) {
+      throw error;
+    }
+    req.query = { ...req.query, limit: req.body?.limit };
+    return getRankings(req, res);
+  }
 });
 
 const scoreResume = asyncHandler(async (req, res) => {
@@ -145,39 +182,48 @@ function scoreJobForCandidate(candidate, job) {
   };
 }
 
+async function resolveCandidateId(req) {
+  if (req.body?.candidateId || req.body?.cvId || req.query?.candidateId) {
+    return req.body?.candidateId || req.body?.cvId || req.query?.candidateId;
+  }
+  if (req.user?.role === "candidate") {
+    const candidate = await getCandidateForUser(req.user);
+    return candidate ? (candidate._id || candidate.id) : undefined;
+  }
+  return undefined;
+}
+
+function candidateFilter(id) {
+  if (!id) return { _id: null };
+  return mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id };
+}
+
+const loadCandidateContext = async (candidateId) => {
+  const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+  if (!candidate) return { candidate: null, resume: null };
+  const resume = await Resume.findOne({ candidateId: candidate._id }).sort({ createdAt: -1 }).lean();
+  return { candidate, resume };
+};
+
 const recommendJobs = asyncHandler(async (req, res) => {
-  const candidateId = req.body.candidateId || req.query.candidateId;
-  if (candidateId || req.user?.role === "candidate") {
-    const candidate = candidateId
-      ? await Candidate.findOne({ $or: [mongoose.Types.ObjectId.isValid(candidateId) ? { _id: candidateId } : { id: candidateId }, { id: candidateId }] }).lean()
-      : await Candidate.findOne({ $or: [{ userId: req.user._id }, { email: req.user.email }] }).lean();
-    if (!candidate) return res.status(404).json({ message: "Candidate profile not found" });
-
-    const limit = Number.parseInt(req.body.limit || req.query.limit, 10) || 10;
-    const jobs = await Job.find({ published: true, active: true, status: { $in: ["open", "active"] } }).lean();
-    const recommendations = jobs
-      .map((job) => {
-        const result = scoreJobForCandidate(candidate, job);
-        return {
-          jobId: String(job._id),
-          title: job.title,
-          company: job.company,
-          matchScore: result.score,
-          location: job.location,
-          industry: job.industry,
-          matchedSkills: result.matched,
-          missingSkills: result.missing,
-          reason: "Matched from live MongoDB job requirements and candidate profile skills.",
-        };
-      })
-      .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, limit);
-
-    return res.json({ candidate: { id: String(candidate._id), name: candidate.name }, recommendations, source: "mongodb" });
+  const candidateId = await resolveCandidateId(req);
+  if (!candidateId || candidateId === "0") {
+    return res.status(400).json({ message: "Candidate ID is required for job recommendations" });
   }
 
-  const result = await aiModelService.recommendJobs(req.body);
-  res.json(result);
+  const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+  if (!candidate) {
+    return res.status(404).json({ message: "Candidate not found" });
+  }
+
+  const result = await getCandidateRecommendations(candidateId, req.body.limit);
+  res.json({
+    ...result,
+    candidate: {
+      ...result.candidate,
+      cvId: String(candidateId),
+    },
+  });
 });
 
 const predictSelection = asyncHandler(async (req, res) => {
@@ -186,57 +232,51 @@ const predictSelection = asyncHandler(async (req, res) => {
 });
 
 const skillGap = asyncHandler(async (req, res) => {
-  const candidateId = req.body.candidateId || req.query.candidateId || req.body.cvId || req.query.cvId;
-  if (candidateId || req.user?.role === "candidate") {
-    const candidate = candidateId
-      ? await Candidate.findOne({ $or: [mongoose.Types.ObjectId.isValid(String(candidateId)) ? { _id: candidateId } : { id: candidateId }, { id: candidateId }] }).lean()
-      : await Candidate.findOne({ $or: [{ userId: req.user._id }, { email: req.user.email }] }).lean();
-    if (!candidate) return res.status(404).json({ message: "Candidate profile not found" });
-
-    const jobs = await Job.find({ published: true, active: true, status: { $in: ["open", "active"] } }).lean();
-    const ranked = jobs
-      .map((job) => ({ job, result: scoreJobForCandidate(candidate, job) }))
-      .sort((a, b) => b.result.score - a.result.score);
-    const best = ranked[0];
-
-    if (!best) {
-      return res.json({
-        targetJob: null,
-        matched: [],
-        missing: [],
-        learningPath: [],
-      });
-    }
-
-    const matched = best.result.matched.map((skill) => ({ skill, level: 80 }));
-    const missing = best.result.missing.map((skill) => ({
-      skill,
-      recommended: `Build a portfolio project or course module using ${skill}.`,
-    }));
-
-    return res.json({
-      targetJob: {
-        jobId: String(best.job._id),
-        title: best.job.title,
-        company: best.job.company,
-        matchScore: best.result.score,
-        location: best.job.location,
-        industry: best.job.industry || "Technology",
-        reason: "Compared against live MongoDB job requirements and candidate profile skills.",
-      },
-      matched,
-      missing,
-      learningPath: missing.slice(0, 4).map((item, index) => ({
-        step: index + 1,
-        title: `Improve ${item.skill}`,
-        duration: "1-2 weeks",
-        type: "practice",
-      })),
-    });
+  const candidateId = await resolveCandidateId(req);
+  if (!candidateId || candidateId === "0") {
+    return res.status(400).json({ message: "Candidate ID is required for skill gap analysis" });
   }
 
-  const result = await aiModelService.skillGap(req.body);
-  res.json(result);
+  const candidate = await Candidate.findOne(candidateFilter(candidateId)).lean();
+  if (!candidate) {
+    return res.status(404).json({ message: "Candidate not found" });
+  }
+
+  const jobs = await Job.find({ published: true, active: true, status: { $in: ["open", "active"] } }).lean();
+  const ranked = jobs
+    .map((job) => ({ job, result: scoreJobForCandidate(candidate, job) }))
+    .sort((a, b) => b.result.score - a.result.score);
+  const best = ranked[0];
+
+  if (!best) {
+    return res.json({ targetJob: null, matched: [], missing: [], learningPath: [] });
+  }
+
+  const matched = best.result.matched.map((skill) => ({ skill, level: 80 }));
+  const missing = best.result.missing.map((skill) => ({
+    skill,
+    recommended: `Build a portfolio project or course module using ${skill}.`,
+  }));
+
+  return res.json({
+    targetJob: {
+      jobId: String(best.job._id),
+      title: best.job.title,
+      company: best.job.company,
+      matchScore: best.result.score,
+      location: best.job.location,
+      industry: best.job.industry || "Technology",
+      reason: "Compared against live MongoDB job requirements and candidate profile skills.",
+    },
+    matched,
+    missing,
+    learningPath: missing.slice(0, 4).map((item, index) => ({
+      step: index + 1,
+      title: `Improve ${item.skill}`,
+      duration: "1-2 weeks",
+      type: "practice",
+    })),
+  });
 });
 
 const getModelStatus = asyncHandler(async (_req, res) => {

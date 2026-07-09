@@ -30,6 +30,7 @@ export interface Candidate {
   college: string;
   degree: string;
   specialization: string;
+  role?: string;
   graduationYear: string;
   cgpa: number;
   skills: string[];
@@ -55,6 +56,7 @@ export interface Recruiter {
   phone: string;
   avatar: string;
   companyName: string;
+  company?: string;
   companyAddress: string;
   companyWebsite: string;
   industry: string;
@@ -66,6 +68,7 @@ export interface Recruiter {
   jobsPosted: number;
   totalApplications: number;
   hiredCount: number;
+  hires?: number;
 }
 
 export interface Interview {
@@ -137,15 +140,15 @@ export interface AnalyticsData {
   rejections: number;
 }
 
-export const mockJobs: Job[] = [];
-export const mockCandidates: Candidate[] = [];
-export const mockRecruiters: Recruiter[] = [];
-export const mockInterviews: Interview[] = [];
-export const mockApplications: Application[] = [];
-export const mockMessages: Message[] = [];
-export const mockNotifications: Notification[] = [];
-export const mockComplaints: Complaint[] = [];
-export const mockAnalytics: AnalyticsData[] = [];
+export const jobs: Job[] = [];
+export const candidates: Candidate[] = [];
+export const recruiters: Recruiter[] = [];
+export const interviews: Interview[] = [];
+export const applications: Application[] = [];
+export const messages: Message[] = [];
+export const notifications: Notification[] = [];
+export const complaints: Complaint[] = [];
+export const analytics: AnalyticsData[] = [];
 
 export const topRecruiters: { id: string; name: string; company: string; role: string; hires: number; avatar: string }[] = [
   { id: "rec-1", name: "John Doe", company: "Tech Solutions Inc", role: "Senior Recruiter", hires: 24, avatar: "/images/recruiter-1.jpg" },
@@ -220,15 +223,15 @@ function replaceArray<T>(target: T[], source?: T[]) {
 }
 
 export function applyPlatformSnapshot(snapshot: PlatformSnapshot) {
-  replaceArray(mockJobs, snapshot.jobs);
-  replaceArray(mockCandidates, snapshot.candidates);
-  replaceArray(mockRecruiters, snapshot.recruiters);
-  replaceArray(mockInterviews, snapshot.interviews);
-  replaceArray(mockApplications, snapshot.applications);
-  replaceArray(mockMessages, snapshot.messages);
-  replaceArray(mockNotifications, snapshot.notifications);
-  replaceArray(mockComplaints, snapshot.complaints);
-  replaceArray(mockAnalytics, snapshot.analytics);
+  replaceArray(jobs, snapshot.jobs);
+  replaceArray(candidates, snapshot.candidates);
+  replaceArray(recruiters, snapshot.recruiters);
+  replaceArray(interviews, snapshot.interviews);
+  replaceArray(applications, snapshot.applications);
+  replaceArray(messages, snapshot.messages);
+  replaceArray(notifications, snapshot.notifications);
+  replaceArray(complaints, snapshot.complaints);
+  replaceArray(analytics, snapshot.analytics);
   replaceArray(topRecruiters, snapshot.topRecruiters);
   replaceArray(topCandidates, snapshot.topCandidates);
   Object.assign(adminStats, snapshot.adminStats);

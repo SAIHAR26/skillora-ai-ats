@@ -34,6 +34,13 @@ export interface ResumeScoreResult {
   selectionProbability: number;
   recommendation: string;
   classification: string | null;
+  skills?: string[];
+  matchedKeywords?: string[];
+  missingKeywords?: string[];
+  sectionDetection?: Record<string, boolean>;
+  atsBreakdown?: Record<string, number | null>;
+  experience?: { years?: number; projectSignals?: number };
+  education?: { level?: string; degrees?: string[] };
   breakdown: {
     skillsMatch: number;
     experienceYears: number;
@@ -42,17 +49,35 @@ export interface ResumeScoreResult {
     educationLevel: string;
   };
   strengths: string[];
+  weaknesses?: string[];
   suggestions: string[];
+  resumeImprovements?: string[];
+  interviewPreparationTips?: string[];
+  suggestedCertifications?: string[];
+  careerRecommendations?: string[];
 }
 
 export interface JobRecommendation {
   jobId: string;
+  id?: string;
   title: string;
   company: string;
   matchScore: number;
+  modelScore?: number;
+  profileScore?: number;
+  source?: string;
+  model?: string;
   industry: string;
   location: string;
   reason: string;
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  matchedKeywords?: string[];
+  missingKeywords?: string[];
+  resumeImprovements?: string[];
+  interviewPreparationTips?: string[];
+  suggestedCertifications?: string[];
+  careerRecommendations?: string[];
 }
 
 export interface SkillGapResult {
@@ -60,6 +85,10 @@ export interface SkillGapResult {
   matched: { skill: string; level: number }[];
   missing: { skill: string; recommended: string }[];
   learningPath: { step: number; title: string; duration: string; type: string }[];
+  resumeImprovements?: string[];
+  interviewPreparationTips?: string[];
+  suggestedCertifications?: string[];
+  careerRecommendations?: string[];
 }
 
 export interface ModelStatus {
@@ -68,61 +97,37 @@ export interface ModelStatus {
   report: Record<string, unknown>;
 }
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
-
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = localStorage.getItem("skillora_token");
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers || {}),
-    },
-    ...init,
-  });
-
-  if (!response.ok) {
-    let details: { message?: string } = {};
-    try {
-      details = await response.json();
-    } catch {
-      details = {};
-    }
-    throw new Error(details.message || `Request failed: ${response.status}`);
-  }
-
-  return response.json() as Promise<T>;
-}
+import { apiRequest } from "./platformApi";
 
 export async function fetchAiRankings(limit = 25) {
-  return requestJson<{ rankings: AiRanking[]; model?: string }>(`/ai/rankings?limit=${limit}`);
+  return apiRequest<{ rankings: AiRanking[]; model?: string }>(`/ai/rankings?limit=${limit}`);
 }
 
 export async function fetchAiTrainingSummary() {
-  return requestJson<AiTrainingSummary>("/ai/training-summary");
+  return apiRequest<AiTrainingSummary>("/ai/training-summary");
 }
 
 export async function fetchModelStatus() {
-  return requestJson<ModelStatus>("/ai/model-status");
+  return apiRequest<ModelStatus>("/ai/model-status");
 }
 
 export async function scoreResume(resumeText: string) {
-  return requestJson<ResumeScoreResult>("/ai/score-resume", {
+  return apiRequest<ResumeScoreResult>("/ai/score-resume", {
     method: "POST",
     body: JSON.stringify({ resumeText }),
   });
 }
 
-export async function recommendJobs(cvId = "0", limit = 5) {
-  return requestJson<{ candidate: { cvId: string; name: string; desiredJob: string }; recommendations: JobRecommendation[] }>("/ai/recommend-jobs", {
+export async function recommendJobs(candidateId = "0", limit = 5) {
+  return apiRequest<{ candidate: { cvId: string; name: string; desiredJob: string }; recommendations: JobRecommendation[] }>("/ai/recommend-jobs", {
     method: "POST",
-    body: JSON.stringify({ candidateId: cvId, cvId, limit }),
+    body: JSON.stringify({ candidateId, limit }),
   });
 }
 
-export async function fetchSkillGap(cvId = "0") {
-  return requestJson<SkillGapResult>("/ai/skill-gap", {
+export async function fetchSkillGap(candidateId = "0") {
+  return apiRequest<SkillGapResult>("/ai/skill-gap", {
     method: "POST",
-    body: JSON.stringify({ candidateId: cvId, cvId }),
+    body: JSON.stringify({ candidateId }),
   });
 }

@@ -12,6 +12,11 @@ const ResumeSchema = new mongoose.Schema(
     atsScore: { type: Number, min: 0, max: 100 },
     analysis: { type: Object, default: {} },
     recommendations: [{ type: String, trim: true }],
+    extractedExperience: { type: Object, default: {} },
+    extractedEducation: { type: Object, default: {} },
+    missingKeywords: [{ type: String, trim: true }],
+    strengths: [{ type: String, trim: true }],
+    weaknesses: [{ type: String, trim: true }],
     processed: { type: Boolean, default: false },
   },
   { timestamps: true }

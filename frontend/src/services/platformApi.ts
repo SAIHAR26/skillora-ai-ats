@@ -1,5 +1,6 @@
 import { applyPlatformSnapshot } from "../data/mockData";
 import type { PlatformSnapshot } from "../data/mockData";
+import type { ResumeScoreResult } from "./aiRanking";
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
@@ -73,6 +74,29 @@ export async function fetchDatabaseReport() {
   }>("/platform/database-report");
 }
 
+export async function uploadFormData<T>(path: string, formData: FormData) {
+  const token = localStorage.getItem("skillora_token");
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let details: ApiErrorResponse = {};
+    try {
+      details = await response.json();
+    } catch {
+      details = {};
+    }
+    throw new Error(details.message || `Request failed with status ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export async function fetchSystemSettings() {
   return apiRequest<Record<string, unknown>>("/platform/settings");
 }
@@ -82,4 +106,8 @@ export async function saveSystemSettings(payload: Record<string, unknown>) {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
+}
+
+export async function uploadResume(candidateId: string, formData: FormData) {
+  return uploadFormData<{ message: string; resume: { analysis?: ResumeScoreResult; atsScore?: number } }>(`/candidates/${candidateId}/resumes`, formData);
 }

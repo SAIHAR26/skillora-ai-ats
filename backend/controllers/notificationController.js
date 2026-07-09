@@ -1,5 +1,5 @@
-const Notification = require("../models/Notification");
 const mongoose = require("mongoose");
+const Notification = require("../models/Notification");
 const { idVariants } = require("../services/accessControl");
 
 const notificationFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });

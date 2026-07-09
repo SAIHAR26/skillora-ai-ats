@@ -1,12 +1,24 @@
 const express = require("express");
-const messageController = require("../controllers/messageController");
-const { protect } = require("../middleware/authMiddleware");
+const {
+  listConversations,
+  listMessages,
+  listUsersByRole,
+  markConversationRead,
+  sendMessage,
+  unreadCounts,
+  stream,
+} = require("../controllers/messageController");
+const { requireAuth } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-router.get("/users", protect, messageController.listUsersByRole);
-router.get("/conversations", protect, messageController.listConversations);
-router.get("/conversations/:userId", protect, messageController.getConversation);
-router.post("/", protect, messageController.sendMessage);
+router.get("/users", requireAuth, listUsersByRole);
+router.get("/conversations", requireAuth, listConversations);
+router.get("/conversations/:participantId", requireAuth, listMessages);
+router.get("/unread", requireAuth, unreadCounts);
+router.get("/stream", requireAuth, stream);
+router.get("/", requireAuth, listMessages);
+router.post("/", requireAuth, sendMessage);
+router.patch("/conversations/:participantId/read", requireAuth, markConversationRead);
 
 module.exports = router;

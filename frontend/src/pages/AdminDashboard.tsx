@@ -29,16 +29,15 @@ import {
 } from "lucide-react";
 import {
   adminStats,
-  mockRecruiters,
-  mockCandidates,
-  mockJobs,
-  mockInterviews,
-  mockComplaints,
-  mockAnalytics,
-  mockApplications,
-  mockNotifications,
+  recruiters as platformRecruiters,
+  candidates as platformCandidates,
+  jobs as platformJobs,
+  interviews as platformInterviews,
+  analytics as platformAnalytics,
+  applications as platformApplications,
+  notifications as platformNotifications,
 } from "../data/mockData";
-import type { Recruiter, Candidate, Complaint, Notification } from "../data/mockData";
+import type { Recruiter, Candidate, Complaint, Notification, Job } from "../data/mockData";
 import { apiRequest, fetchPlatformSnapshot, fetchSystemSettings, saveSystemSettings } from "../services/platformApi";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
@@ -152,7 +151,7 @@ function DashboardHome() {
               </tr>
             </thead>
             <tbody>
-              {mockApplications.slice(0, 5).map((app) => (
+              {platformApplications.slice(0, 5).map((app) => (
                 <tr key={app.id} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                   <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{app.candidateName}</td>
                   <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{app.jobTitle}</td>
@@ -183,9 +182,9 @@ function UserManagement() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
 
   useEffect(() => {
-    setRecruiters([...mockRecruiters]);
-    setCandidates([...mockCandidates]);
-  }, [mockRecruiters.length, mockCandidates.length]);
+    setRecruiters([...platformRecruiters]);
+    setCandidates([...platformCandidates]);
+  }, [platformRecruiters.length, platformCandidates.length]);
 
   const filteredRecruiters = recruiters.filter(
     (r) =>
@@ -343,8 +342,8 @@ function RecruiterVerification() {
   const [recruiterActionError, setRecruiterActionError] = useState("");
 
   useEffect(() => {
-    setRecruiters([...mockRecruiters].filter((r) => r.status === "pending"));
-  }, [mockRecruiters.length]);
+    setRecruiters([...recruiters].filter((r) => r.status === "pending"));
+  }, [recruiters.length]);
 
   const updateRecruiterStatus = async (id: string, status: string) => {
     try {
@@ -454,15 +453,15 @@ function RecruiterVerification() {
 
 // Opportunities Management
 function OpportunitiesManagement() {
-  const [jobs, setJobs] = useState(mockJobs);
+  const [jobs, setJobs] = useState<Job[]>(platformJobs);
   const [showForm, setShowForm] = useState(false);
   const [newJob, setNewJob] = useState({ title: "", company: "", location: "", type: "Remote", salary: "", description: "", skills: "", experience: "", deadline: "" });
   const [savingJob, setSavingJob] = useState(false);
   const [jobError, setJobError] = useState("");
 
   useEffect(() => {
-    setJobs([...mockJobs]);
-  }, [mockJobs.length]);
+    setJobs([...platformJobs]);
+  }, [platformJobs.length]);
 
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -609,7 +608,7 @@ function OpportunitiesManagement() {
             </tr>
           </thead>
           <tbody>
-            {jobs.map((job) => (
+            {jobs.map((job: Job) => (
               <tr key={job.id} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                 <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{job.title}</td>
                 <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{job.company}</td>
@@ -639,7 +638,7 @@ function AnalyticsReports() {
         <div className="dashboard-card">
           <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Applications per Month</h3>
           <div className="flex items-end gap-2 h-48">
-            {mockAnalytics.map((d) => (
+            {platformAnalytics.map((d) => (
               <div key={d.month} className="flex-1 flex flex-col items-center gap-1">
                 <div className="w-full flex justify-center">
                   <div className="w-full max-w-[40px] rounded-t-lg transition-all hover:opacity-80" style={{ height: `${d.applications * 0.6}px`, background: "#0071e3" }} />
@@ -653,7 +652,7 @@ function AnalyticsReports() {
         <div className="dashboard-card">
           <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Hiring Success Rate</h3>
           <div className="space-y-4">
-            {mockAnalytics.map((d) => (
+            {platformAnalytics.map((d) => (
               <div key={d.month}>
                 <div className="flex justify-between text-xs mb-1">
                   <span style={{ color: "#0a0a0c" }}>{d.month}</span>
@@ -683,7 +682,7 @@ function AnalyticsReports() {
               </tr>
             </thead>
             <tbody>
-              {mockAnalytics.map((d) => (
+              {platformAnalytics.map((d) => (
                 <tr key={d.month} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                   <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{d.month}</td>
                   <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{d.applications}</td>
@@ -713,10 +712,10 @@ function InterviewManagement() {
 
       <div className="grid md:grid-cols-4 gap-4">
         {[
-          { label: "Pending", count: mockInterviews.filter((i) => i.status === "pending").length, color: "#f5a623" },
-          { label: "Scheduled", count: mockInterviews.filter((i) => i.status === "scheduled").length, color: "#0071e3" },
-          { label: "Completed", count: mockInterviews.filter((i) => i.status === "completed").length, color: "#3dc75a" },
-          { label: "Total", count: mockInterviews.length, color: "#0a0a0c" },
+          { label: "Pending", count: platformInterviews.filter((i) => i.status === "pending").length, color: "#f5a623" },
+          { label: "Scheduled", count: platformInterviews.filter((i) => i.status === "scheduled").length, color: "#0071e3" },
+          { label: "Completed", count: platformInterviews.filter((i) => i.status === "completed").length, color: "#3dc75a" },
+          { label: "Total", count: platformInterviews.length, color: "#0a0a0c" },
         ].map((s) => (
           <div key={s.label} className="dashboard-card text-center">
             <p className="text-3xl font-bold" style={{ color: s.color }}>{s.count}</p>
@@ -738,7 +737,7 @@ function InterviewManagement() {
             </tr>
           </thead>
           <tbody>
-            {mockInterviews.map((int) => (
+            {platformInterviews.map((int) => (
               <tr key={int.id} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                 <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{int.candidateName}</td>
                 <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{int.jobTitle}</td>
@@ -768,8 +767,8 @@ function FeedbackSupport() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
 
   useEffect(() => {
-    setComplaints([...mockComplaints]);
-  }, [mockComplaints.length]);
+    setComplaints([...complaints]);
+  }, [complaints.length]);
 
   const handleResolve = async (id: string) => {
     try {
@@ -833,7 +832,7 @@ function NotificationCenter() {
   const [newNotif, setNewNotif] = useState({ title: "", message: "", recipients: "all" });
 
   useEffect(() => {
-    const next = mockNotifications.map((notification) => ({
+    const next = platformNotifications.map((notification) => ({
       ...notification,
       recipients: "all",
       read: notification.read ?? false,
@@ -841,7 +840,7 @@ function NotificationCenter() {
     if (next.length > 0) {
       setNotifs(next);
     }
-  }, [mockNotifications.length]);
+  }, [platformNotifications.length]);
 
   
 

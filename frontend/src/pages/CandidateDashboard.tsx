@@ -19,15 +19,16 @@ import {
   Search,
   Send,
   Settings,
+  Plus,
   Star,
   Target,
   Upload,
   XCircle,
   Zap,
 } from "lucide-react";
-import { fetchSkillGap, recommendJobs, scoreResume } from "../services/aiRanking";
+import { fetchSkillGap, recommendJobs } from "../services/aiRanking";
 import type { JobRecommendation, ResumeScoreResult, SkillGapResult } from "../services/aiRanking";
-import { apiRequest } from "../services/platformApi";
+import { apiRequest, uploadResume } from "../services/platformApi";
 
 type Candidate = {
   _id?: string;
@@ -45,6 +46,7 @@ type Candidate = {
   cgpa?: number;
   linkedin?: string;
   github?: string;
+  avatar?: string;
   skills?: string[];
   preferredJobTypes?: string[];
   experienceLevel?: string;
@@ -121,12 +123,24 @@ type Message = {
   read?: boolean;
 };
 
+type Recipient = {
+  _id?: string;
+  id?: string;
+  name?: string;
+  email?: string;
+  role?: string;
+  company?: string;
+  companyName?: string;
+  avatar?: string;
+};
+
 const candidateKey = (candidate?: Candidate | null) => candidate?._id || candidate?.id || "";
+const recipientKey = (recipient?: Recipient | null) => recipient?._id || recipient?.id || "";
 const jobKey = (job?: Job | null) => job?._id || job?.id || "";
 const jobSkills = (job: Job) => job.skillsRequired?.length ? job.skillsRequired : job.skills || [];
 const statusLabel = (value?: string) => (value || "applied").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const formatDate = (value?: string) => value ? new Date(value).toLocaleDateString() : "Not scheduled";
-const profileFields = ["name", "email", "phone", "location", "college", "degree", "skills", "resumeUrl"] as const;
+const profileFields = ["name", "email", "phone", "location", "college", "degree", "skills", "avatar", "resumeUrl"] as const;
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -259,27 +273,16 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
     setAnalyzing(true);
     setError("");
     try {
-      if (!file.type.startsWith("text/") && !file.name.toLowerCase().endsWith(".txt")) {
-        throw new Error("Only text resumes can be analyzed until server-side PDF/DOCX extraction is configured.");
+      const allowedExtensions = [".txt", ".pdf", ".docx"];
+      const extension = file.name ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase() : "";
+      if (!allowedExtensions.includes(extension)) {
+        throw new Error("Only .txt, .pdf, and .docx resume files are supported.");
       }
-      const fileText = await file.text();
-      if (!fileText.trim()) throw new Error("The uploaded resume did not contain extractable text.");
-      const result = await scoreResume(fileText);
-      await apiRequest(`/candidates/${candidateKey(candidate)}/resumes`, {
-        method: "POST",
-        body: JSON.stringify({
-          originalFileName: file.name,
-          contentType: file.type || "text/plain",
-          fileSize: file.size,
-          extractedText: fileText,
-          parsedSkills: result.strengths,
-          atsScore: result.atsScore,
-          analysis: result,
-          recommendations: result.suggestions,
-          processed: true,
-        }),
-      });
-      setAnalysis(result);
+
+      const formData = new FormData();
+      formData.append("resume", file);
+      const result = await uploadResume(candidateKey(candidate), formData);
+      setAnalysis(result.resume.analysis || null);
       setUploaded(true);
       await refresh();
     } catch (caught) {
@@ -292,19 +295,22 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
   };
 
   const atsScore = analysis?.atsScore ?? candidate?.atsScore ?? 0;
-  const strengths = analysis?.strengths || candidate?.skills || [];
+  const detectedSkills = analysis?.skills || candidate?.skills || [];
+  const strengths = analysis?.strengths || [];
+  const weaknesses = analysis?.weaknesses || [];
   const suggestions = analysis?.suggestions || [];
+  const atsBreakdown = analysis?.atsBreakdown || {};
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Resume Analyzer</h1>
       <div className="dashboard-card">
         <div onClick={() => fileInputRef.current?.click()} className="border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all hover:border-blue-400" style={{ borderColor: "#e5e5e5" }}>
-          <input ref={fileInputRef} type="file" accept=".txt,text/plain" className="hidden" onChange={handleFileChange} />
+          <input ref={fileInputRef} type="file" accept=".txt,.pdf,.docx" className="hidden" onChange={handleFileChange} />
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: "#e8f0fe" }}>
             <Upload size={28} style={{ color: "#0071e3" }} />
           </div>
-          <h3 className="text-lg font-semibold mb-2" style={{ color: "#0a0a0c" }}>{analyzing ? "Analyzing your resume..." : "Upload a text resume"}</h3>
+          <h3 className="text-lg font-semibold mb-2" style={{ color: "#0a0a0c" }}>{analyzing ? "Analyzing your resume..." : "Upload your resume file"}</h3>
           <p className="text-sm" style={{ color: "#6c6c6c" }}>ATS scoring uses the trained ML endpoint and stores the result in MongoDB.</p>
         </div>
         {error && <p className="text-sm mt-3" style={{ color: "#b91c1c" }}>{error}</p>}
@@ -323,11 +329,26 @@ function ResumeAnalyzer({ candidate, refresh }: { candidate: Candidate | null; r
           <div className="grid md:grid-cols-2 gap-6">
             <div className="dashboard-card">
               <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><CheckCircle size={18} style={{ color: "#3dc75a" }} /> Extracted Skills</h3>
-              {strengths.length ? strengths.map((skill) => <p key={skill} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{skill}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No skills extracted yet.</p>}
+              {detectedSkills.length ? detectedSkills.map((skill) => <p key={skill} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{skill}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No skills extracted yet.</p>}
             </div>
             <div className="dashboard-card">
               <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><Zap size={18} style={{ color: "#f5a623" }} /> Recommendations</h3>
               {suggestions.length ? suggestions.map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>Upload a resume to generate recommendations.</p>}
+            </div>
+          </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            {Object.entries(atsBreakdown).filter(([, value]) => typeof value === "number").map(([key, value]) => (
+              <StatCard key={key} title={statusLabel(key)} value={`${value}%`} icon={<Target size={20} />} color="#0071e3" />
+            ))}
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><CheckCircle size={18} style={{ color: "#3dc75a" }} /> Strengths</h3>
+              {strengths.length ? strengths.map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No strengths detected yet.</p>}
+            </div>
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><XCircle size={18} style={{ color: "#e74c3c" }} /> Weaknesses</h3>
+              {weaknesses.length ? weaknesses.map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>) : <p className="text-sm" style={{ color: "#6c6c6c" }}>No major weaknesses detected.</p>}
             </div>
           </div>
         </>
@@ -417,7 +438,13 @@ function AIRecommendations({ candidate }: { candidate: Candidate | null }) {
   const [recommendations, setRecommendations] = useState<JobRecommendation[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
-    recommendJobs(candidateKey(candidate) || "0", 10)
+    const candidateId = candidateKey(candidate);
+    if (!candidateId) {
+      setRecommendations([]);
+      return;
+    }
+    setError("");
+    recommendJobs(candidateId, 10)
       .then((result) => setRecommendations(result.recommendations || []))
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load recommendations."));
   }, [candidate]);
@@ -432,8 +459,18 @@ function AIRecommendations({ candidate }: { candidate: Candidate | null }) {
               <h3 className="text-base font-semibold" style={{ color: "#0a0a0c" }}>{rec.title}</h3>
               <p className="text-sm mt-1" style={{ color: "#6c6c6c" }}>{rec.company} | {rec.location}</p>
               <p className="text-sm mt-3" style={{ color: "#0a0a0c" }}>{rec.reason}</p>
+              {(rec.matchedSkills?.length || rec.missingSkills?.length) && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {(rec.matchedSkills || []).slice(0, 5).map((skill) => <span key={`matched-${rec.jobId}-${skill}`} className="px-2 py-1 rounded-full text-xs" style={{ background: "#e8f7ee", color: "#166534" }}>{skill}</span>)}
+                  {(rec.missingSkills || []).slice(0, 5).map((skill) => <span key={`missing-${rec.jobId}-${skill}`} className="px-2 py-1 rounded-full text-xs" style={{ background: "#fff3cd", color: "#8a5a00" }}>{skill}</span>)}
+                </div>
+              )}
             </div>
-            <span className="px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "#e8f0fe", color: "#0071e3" }}>{rec.matchScore}%</span>
+            <div className="text-right shrink-0">
+              <span className="px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "#e8f0fe", color: "#0071e3" }}>{rec.matchScore}%</span>
+              {rec.modelScore !== undefined && <p className="text-xs mt-2" style={{ color: "#6c6c6c" }}>Model {rec.modelScore}%</p>}
+              {rec.profileScore !== undefined && <p className="text-xs" style={{ color: "#6c6c6c" }}>Profile {rec.profileScore}%</p>}
+            </div>
           </div>
         </div>
       ))}
@@ -502,7 +539,12 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
   const [gap, setGap] = useState<SkillGapResult | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    fetchSkillGap(candidateKey(candidate) || "0")
+    const candidateId = candidateKey(candidate);
+    if (!candidateId) {
+      setGap(null);
+      return;
+    }
+    fetchSkillGap(candidateId)
       .then(setGap)
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load skill gap analysis."));
   }, [candidate]);
@@ -527,6 +569,20 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
             <h3 className="text-base font-semibold mb-4 flex items-center gap-2" style={{ color: "#0a0a0c" }}><BookOpen size={18} style={{ color: "#0071e3" }} /> Improvement Suggestions</h3>
             {gap.learningPath.map((item) => <p key={item.step} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item.step}. {item.title} ({item.duration})</p>)}
           </div>
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Resume Improvements</h3>
+              {(gap.resumeImprovements || []).map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>)}
+            </div>
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Interview Prep</h3>
+              {(gap.interviewPreparationTips || []).map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>)}
+            </div>
+            <div className="dashboard-card">
+              <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Certifications</h3>
+              {(gap.suggestedCertifications || []).map((item) => <p key={item} className="text-sm mb-2" style={{ color: "#0a0a0c" }}>{item}</p>)}
+            </div>
+          </div>
         </>
       )}
     </div>
@@ -534,21 +590,54 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
 }
 
 function Messages({ candidate }: { candidate: Candidate | null }) {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [reply, setReply] = useState("");
-  const [recipientId, setRecipientId] = useState("");
+  const [recipientType, setRecipientType] = useState<"recruiter" | "admin">("recruiter");
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
+  const [showChooser, setShowChooser] = useState(false);
+  const [search, setSearch] = useState("");
   const [error, setError] = useState("");
+
+  const currentUserId = user?.id || "";
+
+  useEffect(() => {
+    if (!showChooser) return;
+    const params = new URLSearchParams({ role: recipientType });
+    if (search.trim()) params.set("search", search.trim());
+    apiRequest<{ users: Recipient[] }>(`/messages/users?${params.toString()}`)
+      .then((result) => setRecipients(result.users))
+      .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load recipients."));
+  }, [recipientType, search, showChooser]);
+
+  const startChat = async (recipient: Recipient) => {
+    const id = recipientKey(recipient);
+    if (!id) return;
+    setSelectedRecipient(recipient);
+    setShowChooser(false);
+    setError("");
+    try {
+      const history = await apiRequest<{ messages: Message[] }>(`/messages/conversations/${id}`);
+      setMessages(history.messages);
+      await apiRequest(`/messages/conversations/${id}/read`, { method: "PATCH" });
+    } catch (caught) {
+      setMessages([]);
+      setError(caught instanceof Error ? caught.message : "Unable to load conversation.");
+    }
+  };
 
   const handleSend = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!reply.trim() || !recipientId.trim() || !candidateKey(candidate)) return;
+    const recipientId = recipientKey(selectedRecipient);
+    if (!reply.trim() || !recipientId || !currentUserId) return;
     try {
-      const result = await apiRequest<{ message: Message }>("/platform/messages", {
+      const result = await apiRequest<{ message: Message }>("/messages", {
         method: "POST",
         body: JSON.stringify({
-          senderId: candidateKey(candidate),
-          senderName: candidate?.name || "Candidate",
-          senderRole: "candidate",
+          senderId: currentUserId,
+          senderName: user?.name || candidate?.name || "Candidate",
+          senderRole: user?.role || "candidate",
           recipientId,
           content: reply,
           read: false,
@@ -562,24 +651,56 @@ function Messages({ candidate }: { candidate: Candidate | null }) {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
-      <div className="dashboard-card" style={{ minHeight: 400 }}>
-        <input value={recipientId} onChange={(e) => setRecipientId(e.target.value)} placeholder="Recipient user ID" className="w-full mb-4 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-        <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
-          {messages.length === 0 ? <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No conversation selected from MongoDB yet.</p> : messages.map((msg) => (
-            <div key={msg._id || msg.id} className="flex justify-end">
-              <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl rounded-br-sm" style={{ background: "#0071e3", color: "white" }}>
-                <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
-                <p className="text-sm">{msg.content}</p>
+    <div className="space-y-6 relative">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
+        <button onClick={() => setShowChooser(true)} className="h-11 w-11 rounded-full flex items-center justify-center shadow-sm" style={{ background: "#0a0a0c", color: "#f2f0e6" }} title="Start conversation">
+          <Plus size={20} />
+        </button>
+      </div>
+      {showChooser && (
+        <div className="dashboard-card space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {(["recruiter", "admin"] as const).map((role) => (
+              <button key={role} onClick={() => setRecipientType(role)} className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: recipientType === role ? "#0a0a0c" : "#f4f4f4", color: recipientType === role ? "#f2f0e6" : "#0a0a0c" }}>{role === "recruiter" ? "Recruiters" : "Admin"}</button>
+            ))}
+          </div>
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name or email" className="w-full px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <div className="grid md:grid-cols-2 gap-3">
+            {recipients.map((recipient) => (
+              <div key={recipientKey(recipient)} className="p-4 rounded-lg flex items-center gap-3" style={{ border: "1px solid #e5e5e5", background: "white" }}>
+                <div className="w-11 h-11 rounded-full flex items-center justify-center overflow-hidden" style={{ background: "#e8f0fe", color: "#0071e3" }}>
+                  {recipient.avatar ? <img src={recipient.avatar} alt={recipient.name || "Recipient"} className="w-full h-full object-cover" /> : (recipient.name || recipient.email || "U").slice(0, 1)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate" style={{ color: "#0a0a0c" }}>{recipient.name || recipient.email}</p>
+                  <p className="text-xs truncate" style={{ color: "#6c6c6c" }}>{recipient.companyName || recipient.company || recipient.role}</p>
+                </div>
+                <button onClick={() => startChat(recipient)} className="px-3 py-2 rounded-lg text-xs font-medium" style={{ background: "#0071e3", color: "white" }}>Start Chat</button>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="dashboard-card" style={{ minHeight: 400 }}>
+        {selectedRecipient && <p className="text-sm font-medium mb-4" style={{ color: "#0a0a0c" }}>Chat with {selectedRecipient.name || selectedRecipient.email}</p>}
+        <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
+          {messages.length === 0 ? <p className="text-sm text-center py-8" style={{ color: "#6c6c6c" }}>No conversation selected from MongoDB yet.</p> : messages.map((msg) => {
+            const mine = msg.senderId === currentUserId;
+            return (
+              <div key={msg._id || msg.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div className="max-w-xs lg:max-w-md px-4 py-3 rounded-xl" style={{ background: mine ? "#0071e3" : "#f4f4f4", color: mine ? "white" : "#0a0a0c" }}>
+                  <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
+                  <p className="text-sm">{msg.content}</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
         {error && <p className="text-sm mb-3" style={{ color: "#b91c1c" }}>{error}</p>}
         <form onSubmit={handleSend} className="flex gap-2 pt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
-          <input value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Type your message" className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
-          <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}><Send size={16} /></button>
+          <input value={reply} onChange={(e) => setReply(e.target.value)} disabled={!selectedRecipient} placeholder={selectedRecipient ? "Type your message" : "Choose a recipient first"} className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none disabled:opacity-60" style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <button type="submit" disabled={!selectedRecipient} className="px-4 py-2.5 rounded-lg text-sm font-medium disabled:opacity-60" style={{ background: "#0a0a0c", color: "#f2f0e6" }}><Send size={16} /></button>
         </form>
       </div>
     </div>
@@ -646,6 +767,7 @@ function SettingsPage({ candidate, refresh }: { candidate: Candidate | null; ref
             ["college", "College/University"],
             ["degree", "Degree"],
             ["specialization", "Specialization"],
+            ["avatar", "Profile Photo URL"],
             ["linkedin", "LinkedIn"],
             ["github", "GitHub"],
             ["experienceLevel", "Experience Level"],
@@ -684,37 +806,57 @@ export default function CandidateDashboard() {
       const current = await apiRequest<Candidate>("/candidates/me/profile");
       setCandidate(current);
       const id = candidateKey(current);
+      if (!id) {
+        setApplications([]);
+        setInterviews([]);
+        setNotifications([]);
+        return;
+      }
+
       const userId = current.userId || user?.id || id;
       const [apps, ints, notifs] = await Promise.all([
-        apiRequest<Application[]>(`/applications?candidateId=${id}`),
-        apiRequest<Interview[]>(`/interviews?candidateId=${id}`),
-        apiRequest<Notification[]>(`/notifications?userId=${userId}`),
+        apiRequest<Application[]>(`/applications?candidateId=${encodeURIComponent(id)}`),
+        apiRequest<Interview[]>(`/interviews?candidateId=${encodeURIComponent(id)}`),
+        apiRequest<Notification[]>(`/notifications?userId=${encodeURIComponent(userId)}`),
       ]);
       setApplications(apps);
       setInterviews(ints);
       setNotifications(notifs);
     } catch (caught) {
-      setLoadError(caught instanceof Error ? caught.message : "Unable to load candidate data.");
+      setLoadError(caught instanceof Error ? caught.message : "Unable to load candidate dashboard data.");
     }
   };
 
   useEffect(() => {
-    void refresh();
-  }, []);
+    if (user?.id || user?.email) {
+      void refresh();
+    }
+  }, [user?.id, user?.email]);
 
   const renderContent = () => {
     switch (activeTab) {
-      case "dashboard": return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
-      case "resume": return <ResumeAnalyzer candidate={candidate} refresh={refresh} />;
-      case "jobs": return <JobSearch candidate={candidate} applications={applications} refresh={refresh} />;
-      case "recommendations": return <AIRecommendations candidate={candidate} />;
-      case "applications": return <MyApplications applications={applications} />;
-      case "interviews": return <InterviewCenter interviews={interviews} />;
-      case "skillgap": return <SkillGapAnalysis candidate={candidate} />;
-      case "messages": return <Messages candidate={candidate} />;
-      case "notifications": return <NotificationsPage notifications={notifications} />;
-      case "settings": return <SettingsPage candidate={candidate} refresh={refresh} />;
-      default: return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
+      case "dashboard":
+        return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
+      case "resume":
+        return <ResumeAnalyzer candidate={candidate} refresh={refresh} />;
+      case "jobs":
+        return <JobSearch candidate={candidate} applications={applications} refresh={refresh} />;
+      case "recommendations":
+        return <AIRecommendations candidate={candidate} />;
+      case "applications":
+        return <MyApplications applications={applications} />;
+      case "interviews":
+        return <InterviewCenter interviews={interviews} />;
+      case "skillgap":
+        return <SkillGapAnalysis candidate={candidate} />;
+      case "messages":
+        return <Messages candidate={candidate} />;
+      case "notifications":
+        return <NotificationsPage notifications={notifications} />;
+      case "settings":
+        return <SettingsPage candidate={candidate} refresh={refresh} />;
+      default:
+        return <DashboardHome candidate={candidate} applications={applications} interviews={interviews} notifications={notifications} setActiveTab={setActiveTab} />;
     }
   };
 

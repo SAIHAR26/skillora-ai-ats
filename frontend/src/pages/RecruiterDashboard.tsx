@@ -30,17 +30,17 @@ import {
 } from "lucide-react";
 import {
   recruiterStats,
-  mockRecruiters,
-  mockJobs,
-  mockCandidates,
-  mockApplications,
-  mockInterviews,
+  recruiters,
+  jobs,
+  candidates,
+  applications,
+  interviews,
+  messages,
 } from "../data/mockData";
-import type { Job, Application } from "../data/mockData";
+import type { Job, Application, Message } from "../data/mockData";
 import { fetchAiRankings, fetchAiTrainingSummary } from "../services/aiRanking";
 import type { AiRanking, AiTrainingSummary } from "../services/aiRanking";
 import { apiRequest } from "../services/platformApi";
-import { MessagingPanel } from "../components/MessagingPanel";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -163,7 +163,7 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
               </tr>
             </thead>
             <tbody>
-              {mockApplications.slice(0, 4).map((app) => (
+              {applications.slice(0, 4).map((app) => (
                 <tr key={app.id} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                   <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{app.candidateName}</td>
                   <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{app.jobTitle}</td>
@@ -184,7 +184,7 @@ function DashboardHome({ setActiveTab }: { setActiveTab: (t: string) => void }) 
 // Job Management
 function JobManagement() {
   const { user } = useAuth();
-  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email);
+  const currentRecruiter = recruiters.find((recruiter) => recruiter.email === user?.email);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -200,7 +200,7 @@ function JobManagement() {
       .catch((err) => {
         if (!cancelled) {
           const recruiterIds = [user?.id, currentRecruiter?.id].filter(Boolean);
-          setJobs(mockJobs.filter((job) => !job.recruiterId || recruiterIds.includes(job.recruiterId)));
+          setJobs(jobs.filter((job) => !job.recruiterId || recruiterIds.includes(job.recruiterId)));
           setError(err instanceof Error ? err.message : "Could not load recruiter jobs");
         }
       })
@@ -375,10 +375,10 @@ function JobManagement() {
 }
 // Application Management
 function ApplicationManagement() {
-  const [applications] = useState<Application[]>(mockApplications);
+  const [applicationState] = useState<Application[]>(applications);
   const [filter, setFilter] = useState("all");
 
-  const filtered = filter === "all" ? applications : applications.filter((a) => a.status === filter);
+  const filtered = filter === "all" ? applicationState : applicationState.filter((a) => a.status === filter);
 
   return (
     <div className="space-y-6">
@@ -434,7 +434,7 @@ function ApplicationManagement() {
 
 // AI Ranking
 function AIRanking() {
-  const fallbackRankings: AiRanking[] = [...mockApplications]
+  const fallbackRankings: AiRanking[] = [...applications]
     .sort((a, b) => b.atsScore - a.atsScore)
     .map((app) => ({
       id: app.id,
@@ -568,7 +568,7 @@ function CandidateSearch() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ skills: "", experience: "", location: "" });
 
-  const filtered = mockCandidates.filter((c) => {
+  const filtered = candidates.filter((c) => {
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) || c.skills.some((s) => s.toLowerCase().includes(search.toLowerCase()));
     const matchSkills = !filters.skills || c.skills.some((s) => s.toLowerCase().includes(filters.skills.toLowerCase()));
     const matchExp = !filters.experience || c.experienceLevel === filters.experience;
@@ -638,8 +638,6 @@ function CandidateSearch() {
 
 // Interview Management
 function InterviewManagement() {
-  const [interviews] = useState(mockInterviews);
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Interview Management</h1>
@@ -723,7 +721,7 @@ function RecruiterAnalytics() {
         <div className="dashboard-card">
           <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Applications per Job</h3>
           <div className="space-y-3">
-            {mockJobs.map((job) => (
+            {jobs.map((job) => (
               <div key={job.id}>
                 <div className="flex justify-between text-xs mb-1">
                   <span style={{ color: "#0a0a0c" }}>{job.title}</span>
@@ -772,14 +770,68 @@ function RecruiterAnalytics() {
 
 // Messages
 function Messages() {
-  const { user } = useAuth();
-  return <MessagingPanel currentUser={user} allowedRoles={["candidate", "recruiter"]} />;
+  const [localMessages, setLocalMessages] = useState<Message[]>(messages);
+  const [reply, setReply] = useState("");
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reply.trim()) return;
+    const message = {
+      id: `msg-${messages.length + 1}`,
+      senderId: "rec-1",
+      senderName: "You",
+      senderRole: "recruiter",
+      recipientId: "cand-1",
+      content: reply,
+      timestamp: new Date().toISOString(),
+      read: true,
+    };
+    try {
+      const result = await apiRequest<{ message: typeof message }>("/messages", {
+        method: "POST",
+        body: JSON.stringify(message),
+      });
+      setLocalMessages([...localMessages, result.message]);
+    } catch {
+      setLocalMessages([...localMessages, message]);
+    }
+    setReply("");
+  };
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Messages</h1>
+
+      <div className="dashboard-card" style={{ minHeight: "400px" }}>
+        <div className="space-y-4 mb-4 max-h-80 overflow-y-auto">
+          {localMessages.map((msg) => (
+            <div key={msg.id} className={`flex ${msg.senderRole === "recruiter" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-xs lg:max-w-md px-4 py-3 rounded-xl ${msg.senderRole === "recruiter" ? "rounded-br-sm" : "rounded-bl-sm"}`}
+                style={{ background: msg.senderRole === "recruiter" ? "#0071e3" : "#f4f4f4", color: msg.senderRole === "recruiter" ? "white" : "#0a0a0c" }}>
+                <p className="text-xs font-medium mb-1 opacity-70">{msg.senderName}</p>
+                <p className="text-sm">{msg.content}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <form onSubmit={handleSend} className="flex gap-2 pt-4" style={{ borderTop: "1px solid #e5e5e5" }}>
+          <input value={reply} onChange={(e) => setReply(e.target.value)}
+            placeholder="Type your message..."
+            className="flex-1 px-4 py-2.5 rounded-lg text-sm outline-none"
+            style={{ background: "#f4f4f4", border: "1px solid #e5e5e5" }} />
+          <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#0a0a0c", color: "#f2f0e6" }}>
+            <Send size={16} />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 // Contact Admin
 function ContactAdmin() {
   const { user } = useAuth();
-  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email) || mockRecruiters[0];
+  const currentRecruiter = recruiters.find((recruiter) => recruiter.email === user?.email) || recruiters[0];
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
@@ -871,7 +923,7 @@ function ContactAdmin() {
 // Settings
 function SettingsPage() {
   const { user } = useAuth();
-  const currentRecruiter = mockRecruiters.find((recruiter) => recruiter.email === user?.email);
+  const currentRecruiter = recruiters.find((recruiter) => recruiter.email === user?.email);
   const [form, setForm] = useState({
     name: currentRecruiter?.name || user?.name || "",
     email: currentRecruiter?.email || user?.email || "",

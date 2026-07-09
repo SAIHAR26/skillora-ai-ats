@@ -47,11 +47,26 @@ export function MessagingPanel({ currentUser, allowedRoles = ["candidate", "recr
     if (!token) return;
     const stream = new EventSource(`${API_BASE_URL}/messages/stream?token=${encodeURIComponent(token)}`);
     stream.addEventListener("message", (event) => {
-      const message = JSON.parse((event as MessageEvent).data) as Message;
-      setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]);
-      if (message.senderId !== selectedUser?.id && message.senderId !== currentId) {
-        setUnread((counts) => ({ ...counts, [message.senderId]: (counts[message.senderId] || 0) + 1 }));
-      }
+      const payload = JSON.parse((event as MessageEvent).data) as Message | Message[];
+      const incoming = Array.isArray(payload) ? payload : [payload];
+      setMessages((current) => {
+        const byId = new Map(current.map((item) => [item.id, item]));
+        incoming.forEach((msg) => {
+          if (!byId.has(msg.id)) {
+            byId.set(msg.id, msg);
+          }
+        });
+        return Array.from(byId.values()).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      });
+      setUnread((counts) => {
+        const updates = { ...counts };
+        incoming.forEach((message) => {
+          if (message.senderId !== selectedUser?.id && message.senderId !== currentId) {
+            updates[message.senderId] = (updates[message.senderId] || 0) + 1;
+          }
+        });
+        return updates;
+      });
     });
     stream.onerror = () => stream.close();
     return () => stream.close();

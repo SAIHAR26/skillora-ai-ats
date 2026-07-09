@@ -27,6 +27,8 @@ TECH_SKILLS = [
     "excel", "tableau", "power bi", "git", "linux", "rest", "api", "data analysis",
 ]
 
+SECTION_NAMES = ["education", "experience", "projects", "skills", "certifications", "summary"]
+
 
 def load_json_stdin():
     raw = sys.stdin.read().strip()
@@ -85,6 +87,123 @@ def text_features(text):
     }
 
 
+def section_report(text):
+    lower = str(text or "").lower()
+    return {name: bool(re.search(rf"\b{name}\b", lower)) for name in SECTION_NAMES}
+
+
+def keyword_report(text, target_keywords=None):
+    lower = str(text or "").lower()
+    requested = [str(item).strip().lower() for item in (target_keywords or []) if str(item).strip()]
+    keywords = requested or TECH_SKILLS
+    matched = sorted({skill for skill in keywords if skill in lower})
+    missing = sorted(set(keywords) - set(matched))
+    return matched, missing
+
+
+def extract_education(text, fallback):
+    lower = str(text or "").lower()
+    degrees = []
+    for label, pattern in [
+        ("Masters", r"\b(master|m\.s|msc|mba|mtech|m\.tech)\b"),
+        ("Bachelors", r"\b(bachelor|b\.s|b\.tech|be|degree)\b"),
+        ("Diploma", r"\b(diploma)\b"),
+    ]:
+        if re.search(pattern, lower):
+            degrees.append(label)
+    return {
+        "level": fallback,
+        "degrees": degrees or ([fallback] if fallback != "High School" else []),
+    }
+
+
+def build_resume_analysis(resume_text, row, estimated, ats_score, probability, classification, target_keywords=None):
+    sections = section_report(resume_text)
+    matched_keywords, missing_keywords = keyword_report(resume_text, target_keywords)
+    resume_length = int(row["resume_length"])
+    format_score = min(100, max(20, int((sum(sections.values()) / len(sections)) * 100)))
+    keyword_score = int((len(matched_keywords) / max(1, len(matched_keywords) + len(missing_keywords))) * 100)
+    quality_score = int(round((ats_score * 0.45) + (format_score * 0.25) + (keyword_score * 0.2) + (min(100, resume_length / 5) * 0.1)))
+
+    strengths = []
+    if estimated["found_skills"]:
+      strengths.append(f"Detected skills: {', '.join(estimated['found_skills'][:6])}")
+    if float(row["years_experience"]) > 0:
+      strengths.append(f"{float(row['years_experience']):g} years of experience detected")
+    if int(row["project_count"]) > 0:
+      strengths.append(f"{int(row['project_count'])} project signal(s) detected")
+    if sections.get("education"):
+      strengths.append("Education section detected")
+
+    weaknesses = []
+    if missing_keywords:
+      weaknesses.append(f"Missing keywords: {', '.join(missing_keywords[:8])}")
+    if not sections.get("projects"):
+      weaknesses.append("Projects section is missing or unclear")
+    if resume_length < 250:
+      weaknesses.append("Resume text is short; add measurable work and project details")
+    if not estimated["found_skills"]:
+      weaknesses.append("No supported technical skills were detected")
+
+    suggestions = []
+    if missing_keywords:
+      suggestions.append(f"Add relevant keywords: {', '.join(missing_keywords[:5])}.")
+    if not sections.get("projects"):
+      suggestions.append("Add a projects section with technologies, responsibilities, and measurable outcomes.")
+    if resume_length < 250:
+      suggestions.append("Expand role summaries with impact metrics, tools used, and business results.")
+    if not suggestions:
+      suggestions.append("Tailor the resume to the target job description before applying.")
+
+    return {
+        "atsScore": ats_score,
+        "selectionProbability": round(probability, 4),
+        "recommendation": "Shortlist" if ats_score >= 85 else "Review" if ats_score >= 70 else "Needs improvement",
+        "classification": classification,
+        "skills": estimated["found_skills"],
+        "matchedKeywords": matched_keywords,
+        "missingKeywords": missing_keywords[:12],
+        "sectionDetection": sections,
+        "experience": {
+            "years": float(row["years_experience"]),
+            "projectSignals": int(row["project_count"]),
+        },
+        "education": extract_education(resume_text, row["education_level"]),
+        "atsBreakdown": {
+            "resumeFormat": format_score,
+            "sectionDetection": format_score,
+            "keywords": keyword_score,
+            "skills": int(row["skills_match_score"]),
+            "projects": min(100, int(row["project_count"]) * 25),
+            "experience": min(100, int(float(row["years_experience"]) * 20)),
+            "education": 85 if row["education_level"] in ["Masters", "Bachelors"] else 45,
+            "jobMatch": keyword_score,
+            "resumeQuality": quality_score,
+            "grammar": None,
+        },
+        "breakdown": {
+            "skillsMatch": int(row["skills_match_score"]),
+            "experienceYears": float(row["years_experience"]),
+            "projects": int(row["project_count"]),
+            "resumeLength": resume_length,
+            "educationLevel": row["education_level"],
+        },
+        "strengths": strengths,
+        "weaknesses": weaknesses,
+        "suggestions": suggestions,
+        "resumeImprovements": suggestions,
+        "interviewPreparationTips": [
+            f"Prepare examples around {skill}." for skill in estimated["found_skills"][:3]
+        ] or ["Prepare concise project stories using problem, action, and result."],
+        "suggestedCertifications": [
+            f"{skill.title()} certification or guided project" for skill in missing_keywords[:3]
+        ],
+        "careerRecommendations": [
+            f"Target roles requiring {', '.join(estimated['found_skills'][:3])}." if estimated["found_skills"] else "Target roles that match your strongest documented skills."
+        ],
+    }
+
+
 def score_resume(payload):
     ensure_models()
     artifact = joblib.load(model_path("ats_model.pkl"))
@@ -109,25 +228,7 @@ def score_resume(payload):
     if resume_text.strip():
         class_model = joblib.load(model_path("resume_classification_model.pkl"))["model"]
         classification = str(class_model.predict([resume_text])[0])
-    return {
-        "atsScore": ats_score,
-        "selectionProbability": round(probability, 4),
-        "recommendation": "Shortlist" if ats_score >= 85 else "Review" if ats_score >= 70 else "Needs improvement",
-        "classification": classification,
-        "breakdown": {
-            "skillsMatch": int(row["skills_match_score"]),
-            "experienceYears": float(row["years_experience"]),
-            "projects": int(row["project_count"]),
-            "resumeLength": int(row["resume_length"]),
-            "educationLevel": row["education_level"],
-        },
-        "strengths": estimated["found_skills"][:8],
-        "suggestions": [
-            "Add role-specific keywords from the target job description.",
-            "Include measurable achievements and project outcomes.",
-            "Mention tools, frameworks, cloud platforms, and version control explicitly.",
-        ],
-    }
+    return build_resume_analysis(resume_text, row, estimated, ats_score, probability, classification, payload.get("targetKeywords"))
 
 
 def classify_resume(payload):

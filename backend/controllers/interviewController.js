@@ -102,7 +102,12 @@ exports.listInterviews = async (req, res) => {
   const { candidateId, recruiterId, jobId, status } = req.query;
   const filters = {};
 
-  if (candidateId) filters.candidateId = candidateId;
+  if (candidateId) {
+    filters.$or = [{ candidateId: candidateId }];
+    if (/^[a-f\d]{24}$/i.test(String(candidateId))) {
+      filters.$or.push({ candidateId: require("mongoose").Types.ObjectId(String(candidateId)) });
+    }
+  }
   if (req.user?.role === "recruiter") {
     const recruiter = await getRecruiterForUser(req.user);
     if (!recruiter) return res.status(404).json({ message: "Recruiter profile not found" });

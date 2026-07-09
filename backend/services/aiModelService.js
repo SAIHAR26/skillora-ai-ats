@@ -1,11 +1,26 @@
-const { spawn } = require("child_process");
+const { spawn, spawnSync } = require("child_process");
 const path = require("path");
 
 const pythonScript = path.resolve(__dirname, "..", "ml", "predict.py");
+function detectPythonCommand() {
+  const candidates = process.platform === "win32" ? ["py", "python", "python3"] : ["python3", "python"];
+  for (const command of candidates) {
+    try {
+      const result = spawnSync(command, ["--version"], { stdio: "ignore" });
+      if (result.status === 0) {
+        return command;
+      }
+    } catch (_error) {
+      continue;
+    }
+  }
+  return candidates[0];
+}
+const pythonCommand = detectPythonCommand();
 
 function runModelTask(task, payload = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn("python", [pythonScript, "--task", task], {
+    const child = spawn(pythonCommand, [pythonScript, "--task", task], {
       cwd: path.resolve(__dirname, "..", ".."),
       env: {
         ...process.env,
