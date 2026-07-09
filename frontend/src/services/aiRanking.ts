@@ -56,7 +56,7 @@ export interface JobRecommendation {
 }
 
 export interface SkillGapResult {
-  targetJob: JobRecommendation;
+  targetJob: JobRecommendation | null;
   matched: { skill: string; level: number }[];
   missing: { skill: string; recommended: string }[];
   learningPath: { step: number; title: string; duration: string; type: string }[];
@@ -71,16 +71,24 @@ export interface ModelStatus {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = localStorage.getItem("skillora_token");
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers || {}),
     },
     ...init,
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    let details: { message?: string } = {};
+    try {
+      details = await response.json();
+    } catch {
+      details = {};
+    }
+    throw new Error(details.message || `Request failed: ${response.status}`);
   }
 
   return response.json() as Promise<T>;
@@ -108,13 +116,13 @@ export async function scoreResume(resumeText: string) {
 export async function recommendJobs(cvId = "0", limit = 5) {
   return requestJson<{ candidate: { cvId: string; name: string; desiredJob: string }; recommendations: JobRecommendation[] }>("/ai/recommend-jobs", {
     method: "POST",
-    body: JSON.stringify({ cvId, limit }),
+    body: JSON.stringify({ candidateId: cvId, cvId, limit }),
   });
 }
 
 export async function fetchSkillGap(cvId = "0") {
   return requestJson<SkillGapResult>("/ai/skill-gap", {
     method: "POST",
-    body: JSON.stringify({ cvId }),
+    body: JSON.stringify({ candidateId: cvId, cvId }),
   });
 }

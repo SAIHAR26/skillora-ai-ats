@@ -152,7 +152,7 @@ const getCandidateApplications = asyncHandler(async (req, res) => {
 
   const applications = await Application.find({
     $or: [{ candidateId: candidate._id }, { candidateId: candidate.id }],
-  }).populate("jobId resumeId").sort({ appliedAt: -1 });
+  }).sort({ appliedAt: -1 });
   return res.json(applications);
 });
 
