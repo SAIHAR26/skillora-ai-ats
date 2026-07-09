@@ -5,6 +5,19 @@ import { loginUser } from "../services/platformApi";
 import { Eye, EyeOff, ArrowLeft, Building2, User, Shield } from "lucide-react";
 
 type LoginRole = "admin" | "recruiter" | "candidate";
+type SeededAccount = {
+  role: LoginRole;
+  label: string;
+  email: string;
+  password: string;
+};
+
+const seededAccounts: SeededAccount[] = [
+  { role: "admin", label: "Admin", email: "admin@skillora.com", password: "AdminPass123!" },
+  { role: "candidate", label: "Jane Candidate", email: "jane.smith@gmail.com", password: "CandidatePass123!" },
+  { role: "candidate", label: "Lasya Candidate", email: "lasya@skillora.com", password: "LasyaPass123!" },
+  { role: "recruiter", label: "Recruiter", email: "recruiter@company.com", password: "SecurePassword123!" },
+];
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -25,7 +38,7 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const result = await loginUser({ email, password, role });
+      const result = await loginUser({ email: email.trim(), password, role });
       login(result.user.role, result.token, result.user);
       if (result.user.role === "admin") navigate("/admin");
       else if (result.user.role === "recruiter") navigate("/recruiter");
@@ -220,13 +233,30 @@ export default function LoginPage() {
               className="mt-6 p-4 rounded-xl text-xs"
               style={{ background: "#f4f4f4", color: "#6c6c6c" }}
             >
-              <p className="font-semibold mb-2" style={{ color: "#0a0a0c" }}>
+              <p className="font-semibold mb-3" style={{ color: "#0a0a0c" }}>
                 Seeded account examples:
               </p>
-              <p>admin@skillora.com / AdminPass123!</p>
-              <p>jane.smith@gmail.com / CandidatePass123!</p>
-              <p>lasya@skillora.com / LasyaPass123!</p>
-              <p>recruiter@company.com / SecurePassword123!</p>
+              <div className="space-y-2">
+                {seededAccounts.map((account) => (
+                  <button
+                    key={account.email}
+                    type="button"
+                    onClick={() => {
+                      setRole(account.role);
+                      setEmail(account.email);
+                      setPassword(account.password);
+                      setError("");
+                    }}
+                    className="w-full rounded-lg border px-3 py-2 text-left transition-colors hover:bg-white"
+                    style={{ borderColor: "#dedbd1", color: "#0a0a0c" }}
+                  >
+                    <span className="block font-semibold">{account.label}</span>
+                    <span className="block break-all" style={{ color: "#6c6c6c" }}>
+                      {account.email} / {account.password}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </form>
         </div>
