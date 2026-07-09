@@ -133,6 +133,49 @@ const seedData = async () => {
       resumeIds: [],
     });
     console.log("✅ Created Candidate Profile");
+    // Create Lasya candidate user advertised on the login page
+    const lasyaUser = await User.create({
+      name: "Lasya",
+      email: "lasya@skillora.com",
+      passwordHash: await bcrypt.hash("LasyaPass123!", 10),
+      role: "candidate",
+      status: "active",
+      profileCompleted: true,
+    });
+    console.log("Created Lasya Candidate User");
+
+    await Candidate.create({
+      userId: lasyaUser._id,
+      id: "cand-lasya",
+      name: "Lasya",
+      email: "lasya@skillora.com",
+      phone: "+91-98765-43210",
+      phoneNumber: "+91-98765-43210",
+      avatar: "/images/candidate-lasya.jpg",
+      college: "Vellore Institute of Technology",
+      degree: "Bachelor of Technology",
+      specialization: "Artificial Intelligence and Data Science",
+      graduationYear: "2025",
+      cgpa: 8.9,
+      skills: ["Python", "React", "Machine Learning", "SQL", "Node.js"],
+      education: ["B.Tech Artificial Intelligence and Data Science, Vellore Institute of Technology"],
+      projects: ["AI resume screening dashboard", "Skill-based job recommendation engine"],
+      experienceLevel: "Fresher",
+      atsScore: 96,
+      location: "Hyderabad, India",
+      currentLocation: "Hyderabad, India",
+      preferredLocation: "Remote",
+      preferredLocations: ["Remote"],
+      workPreference: "Full-time",
+      preferredJobTypes: ["Full-time"],
+      linkedin: "https://linkedin.com/in/lasya-skillora",
+      github: "https://github.com/lasya-skillora",
+      resumeUrl: "/resumes/lasya.pdf",
+      appliedJobs: [],
+      resumeIds: [],
+      status: "active",
+    });
+    console.log("Created Lasya Candidate Profile");
 
     // Create sample admin user
     const adminUser = await User.create({
@@ -168,6 +211,7 @@ const seedData = async () => {
     console.log("\n📊 Summary:");
     console.log("  - Recruiter User: recruiter@company.com");
     console.log("  - Candidate User: jane.smith@gmail.com");
+    console.log("  - Lasya Candidate User: lasya@skillora.com");
     console.log("  - Admin User: admin@skillora.com");
   } catch (error) {
     console.error("❌ Error seeding data:", error.message);

@@ -119,13 +119,20 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findOne({ email: email.toLowerCase() }).select("+passwordHash +password");
-  if (!user || (role && user.role !== role)) {
+  if (!user) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
   const storedPassword = user.passwordHash || user.password;
   if (!(await verifyPassword(password, storedPassword))) {
     return res.status(401).json({ message: "Invalid credentials" });
+  }
+
+  if (role && user.role !== role) {
+    return res.status(403).json({
+      message: `This account is registered as ${user.role}. Please select ${user.role} and try again.`,
+      role: user.role,
+    });
   }
 
   if (user.role === "recruiter" && user.status === "pending") {
