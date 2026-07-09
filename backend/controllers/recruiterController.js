@@ -136,7 +136,7 @@ const getRecruiterApplications = asyncHandler(async (req, res) => {
   }
   const jobs = await Job.find({ recruiterId: { $in: idVariants(recruiter._id).concat(idVariants(recruiter.id)) } }).select("_id id");
   const jobIds = jobs.flatMap((job) => [job._id, job.id].filter(Boolean));
-  const applications = await Application.find({ jobId: { $in: jobIds } }).populate("jobId candidateId resumeId").sort({ appliedAt: -1 });
+  const applications = await Application.find({ jobId: { $in: jobIds } }).sort({ appliedAt: -1 });
   return res.json(applications);
 });
 

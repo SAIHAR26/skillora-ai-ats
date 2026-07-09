@@ -110,7 +110,7 @@ exports.createApplication = async (req, res) => {
 };
 
 exports.getApplication = async (req, res) => {
-  const application = await Application.findById(req.params.id).populate("jobId candidateId resumeId");
+  const application = await Application.findOne(idFilter(req.params.id));
   if (!application) {
     return res.status(404).json({ message: "Application not found" });
   }
@@ -188,12 +188,12 @@ exports.listApplications = async (req, res) => {
     }
   }
 
-  const applications = await Application.find(filters).populate("jobId candidateId resumeId").sort({ appliedAt: -1 });
+  const applications = await Application.find(filters).sort({ appliedAt: -1 });
   res.json(applications);
 };
 
 exports.updateApplicationStatus = async (req, res) => {
-  const application = await Application.findById(req.params.id);
+  const application = await Application.findOne(idFilter(req.params.id));
   if (!application) {
     return res.status(404).json({ message: "Application not found" });
   }
@@ -209,7 +209,7 @@ exports.updateApplicationStatus = async (req, res) => {
   application.updatedAt = new Date();
   await application.save();
 
-  const candidate = await Candidate.findById(application.candidateId);
+  const candidate = await Candidate.findOne(idFilter(application.candidateId));
   if (candidate && status) {
     const typeByStatus = {
       shortlisted: "application_shortlisted",
@@ -231,7 +231,7 @@ exports.updateApplicationStatus = async (req, res) => {
 };
 
 exports.updateApplicationRemarks = async (req, res) => {
-  const application = await Application.findById(req.params.id);
+  const application = await Application.findOne(idFilter(req.params.id));
   if (!application) {
     return res.status(404).json({ message: "Application not found" });
   }
@@ -247,7 +247,7 @@ exports.updateApplicationRemarks = async (req, res) => {
 };
 
 exports.deleteApplication = async (req, res) => {
-  const application = await Application.findById(req.params.id);
+  const application = await Application.findOne(idFilter(req.params.id));
   if (!application) {
     return res.status(404).json({ message: "Application not found" });
   }

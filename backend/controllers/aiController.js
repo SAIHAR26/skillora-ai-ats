@@ -6,6 +6,7 @@ const Resume = require("../models/Resume");
 const { getCandidateRecommendations, getCandidateSkillGap } = require("../services/candidateInsightService");
 const { getRecruiterForUser, getCandidateForUser, idVariants } = require("../services/accessControl");
 const mongoose = require("mongoose");
+const idFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -241,8 +242,41 @@ const skillGap = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
-  const result = await getCandidateSkillGap(candidateId, req.body.jobId);
-  res.json(result);
+  const jobs = await Job.find({ published: true, active: true, status: { $in: ["open", "active"] } }).lean();
+  const ranked = jobs
+    .map((job) => ({ job, result: scoreJobForCandidate(candidate, job) }))
+    .sort((a, b) => b.result.score - a.result.score);
+  const best = ranked[0];
+
+  if (!best) {
+    return res.json({ targetJob: null, matched: [], missing: [], learningPath: [] });
+  }
+
+  const matched = best.result.matched.map((skill) => ({ skill, level: 80 }));
+  const missing = best.result.missing.map((skill) => ({
+    skill,
+    recommended: `Build a portfolio project or course module using ${skill}.`,
+  }));
+
+  return res.json({
+    targetJob: {
+      jobId: String(best.job._id),
+      title: best.job.title,
+      company: best.job.company,
+      matchScore: best.result.score,
+      location: best.job.location,
+      industry: best.job.industry || "Technology",
+      reason: "Compared against live MongoDB job requirements and candidate profile skills.",
+    },
+    matched,
+    missing,
+    learningPath: missing.slice(0, 4).map((item, index) => ({
+      step: index + 1,
+      title: `Improve ${item.skill}`,
+      duration: "1-2 weeks",
+      type: "practice",
+    })),
+  });
 });
 
 const getModelStatus = asyncHandler(async (_req, res) => {

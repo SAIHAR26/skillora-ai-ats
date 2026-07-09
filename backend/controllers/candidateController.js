@@ -251,7 +251,7 @@ const getCandidateApplications = asyncHandler(async (req, res) => {
     return res.status(404).json({ message: "Candidate not found" });
   }
 
-  const applications = await Application.find({ $or: candidateIdentityFilters(candidate) }).populate("jobId resumeId").sort({ appliedAt: -1 });
+  const applications = await Application.find({ $or: candidateIdentityFilters(candidate) }).sort({ appliedAt: -1 });
   return res.json(applications);
 });
 

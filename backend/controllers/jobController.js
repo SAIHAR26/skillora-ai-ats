@@ -141,7 +141,7 @@ exports.createJob = async (req, res) => {
 };
 
 exports.updateJob = async (req, res) => {
-  const job = await Job.findById(req.params.id);
+  const job = await Job.findOne(objectOrLegacyFilter(req.params.id));
   if (!job) {
     return res.status(404).json({ message: "Job not found" });
   }
@@ -180,7 +180,7 @@ exports.updateJob = async (req, res) => {
 };
 
 exports.deleteJob = async (req, res) => {
-  const job = await Job.findById(req.params.id);
+  const job = await Job.findOne(objectOrLegacyFilter(req.params.id));
   if (!job) {
     return res.status(404).json({ message: "Job not found" });
   }
@@ -193,7 +193,7 @@ exports.deleteJob = async (req, res) => {
 };
 
 exports.updateJobStatus = async (req, res) => {
-  const job = await Job.findById(req.params.id);
+  const job = await Job.findOne(objectOrLegacyFilter(req.params.id));
   if (!job) {
     return res.status(404).json({ message: "Job not found" });
   }
@@ -245,6 +245,6 @@ exports.getJobApplications = async (req, res) => {
     return res.status(403).json({ message: "You cannot view another recruiter's applications" });
   }
 
-  const applications = await Application.find({ jobId: { $in: idVariants(job._id).concat(idVariants(job.id)) } }).populate("candidateId resumeId").sort({ appliedAt: -1 });
+  const applications = await Application.find({ jobId: { $in: idVariants(job._id).concat(idVariants(job.id)) } }).sort({ appliedAt: -1 });
   res.json(applications);
 };

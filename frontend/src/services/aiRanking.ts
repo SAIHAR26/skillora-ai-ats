@@ -81,7 +81,7 @@ export interface JobRecommendation {
 }
 
 export interface SkillGapResult {
-  targetJob: JobRecommendation;
+  targetJob: JobRecommendation | null;
   matched: { skill: string; level: number }[];
   missing: { skill: string; recommended: string }[];
   learningPath: { step: number; title: string; duration: string; type: string }[];

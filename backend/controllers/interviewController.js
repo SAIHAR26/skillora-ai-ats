@@ -4,6 +4,8 @@ const Job = require("../models/Job");
 const Notification = require("../models/Notification");
 const Candidate = require("../models/Candidate");
 const { getRecruiterForUser, idVariants, ownsMixedId } = require("../services/accessControl");
+const mongoose = require("mongoose");
+const idFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
 
 async function assertRecruiterOwnsJob(req, job) {
   if (req.user?.role === "admin") return true;
@@ -25,9 +27,9 @@ exports.createInterview = async (req, res) => {
     return res.status(400).json({ message: "applicationId and scheduledAt are required" });
   }
 
-  const application = await Application.findById(applicationId);
+  const application = await Application.findOne(idFilter(applicationId));
   if (!application) return res.status(404).json({ message: "Application not found" });
-  const job = await Job.findById(application.jobId);
+  const job = await Job.findOne(idFilter(application.jobId));
   if (!job) return res.status(404).json({ message: "Job not found" });
   if (!(await assertRecruiterOwnsJob(req, job))) {
     return res.status(403).json({ message: "You cannot schedule interviews for another recruiter's job" });
@@ -54,7 +56,7 @@ exports.createInterview = async (req, res) => {
     return res.status(409).json({ message: "Interview slot overlaps with an existing interview" });
   }
 
-  const candidate = await Candidate.findById(application.candidateId);
+  const candidate = await Candidate.findOne(idFilter(application.candidateId));
   const interview = await Interview.create({
     applicationId,
     jobId: job._id,
@@ -89,7 +91,7 @@ exports.createInterview = async (req, res) => {
 };
 
 exports.getInterviewById = async (req, res) => {
-  const interview = await Interview.findById(req.params.id);
+  const interview = await Interview.findOne(idFilter(req.params.id));
   if (!interview) {
     return res.status(404).json({ message: "Interview not found" });
   }
@@ -121,7 +123,7 @@ exports.listInterviews = async (req, res) => {
 };
 
 exports.updateInterview = async (req, res) => {
-  const interview = await Interview.findById(req.params.id);
+  const interview = await Interview.findOne(idFilter(req.params.id));
   if (!interview) {
     return res.status(404).json({ message: "Interview not found" });
   }
@@ -164,7 +166,7 @@ exports.updateInterview = async (req, res) => {
 };
 
 exports.updateInterviewStatus = async (req, res) => {
-  const interview = await Interview.findById(req.params.id);
+  const interview = await Interview.findOne(idFilter(req.params.id));
   if (!interview) {
     return res.status(404).json({ message: "Interview not found" });
   }

@@ -1,16 +1,15 @@
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
+const { idVariants } = require("../services/accessControl");
+
+const notificationFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
 
 exports.getNotifications = async (req, res) => {
   const filters = {};
   if (req.user?.role === "admin" && req.query.userId) {
-    const userId = String(req.query.userId);
-    filters.userId = { $in: [userId] };
-    if (/^[a-f\d]{24}$/i.test(userId)) {
-      filters.userId.$in.push(mongoose.Types.ObjectId(userId));
-    }
+    filters.userId = { $in: idVariants(req.query.userId) };
   } else if (req.user) {
-    filters.userId = req.user._id;
+    filters.userId = { $in: idVariants(req.user._id).concat(idVariants(req.user.id)) };
   }
 
   const notifications = await Notification.find(filters).sort({ createdAt: -1 });
@@ -18,7 +17,7 @@ exports.getNotifications = async (req, res) => {
 };
 
 exports.markRead = async (req, res) => {
-  const notification = await Notification.findById(req.params.id);
+  const notification = await Notification.findOne(notificationFilter(req.params.id));
   if (!notification) {
     return res.status(404).json({ message: "Notification not found" });
   }

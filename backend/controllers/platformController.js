@@ -5,6 +5,7 @@ const Message = require("../models/Message");
 const Notification = require("../models/Notification");
 const Complaint = require("../models/Complaint");
 const Setting = require("../models/Setting");
+const mongoose = require("mongoose");
 const jobController = require("./jobController");
 const messageController = require("./messageController");
 const {
@@ -36,7 +37,8 @@ const seed = asyncHandler(async (_req, res) => {
 
 const createApplication = asyncHandler(async (req, res) => {
   const application = await Application.create(req.body);
-  await Job.updateOne({ $or: [{ id: req.body.jobId }, { _id: req.body.jobId }] }, { $inc: { applications: 1, totalApplicants: 1 } });
+  const jobIdFilter = mongoose.Types.ObjectId.isValid(String(req.body.jobId)) ? { $or: [{ id: req.body.jobId }, { _id: req.body.jobId }] } : { id: req.body.jobId };
+  await Job.updateOne(jobIdFilter, { $inc: { applications: 1, totalApplicants: 1 } });
   res.status(201).json({ application: toClient(application) });
 });
 
