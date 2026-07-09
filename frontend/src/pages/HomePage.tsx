@@ -534,7 +534,7 @@ export default function HomePage() {
                   {candidate.name}
                 </h3>
                 <p className="text-sm mb-2" style={{ color: "#6c6c6c" }}>
-                  {candidate.role}
+                  {candidate.role || candidate.specialization || candidate.degree || "Candidate"}
                 </p>
                 <div
                   className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold mb-3"
@@ -599,12 +599,12 @@ export default function HomePage() {
                   {recruiter.role}
                 </p>
                 <p className="text-sm mb-4" style={{ color: "#c3c0b4" }}>
-                  {recruiter.company}
+                  {recruiter.company || recruiter.companyName || "Hiring Partner"}
                 </p>
                 <div className="flex items-center justify-center gap-1">
                   <Users size={16} style={{ color: "#5f6e5e" }} />
                   <span className="text-sm font-semibold" style={{ color: "#f2f0e6" }}>
-                    {recruiter.hires} hires
+                    {recruiter.hires || recruiter.hiredCount || 0} hires
                   </span>
                 </div>
               </div>

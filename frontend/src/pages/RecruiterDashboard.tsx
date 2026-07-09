@@ -41,7 +41,6 @@ import type { Job, Application, Message } from "../data/mockData";
 import { fetchAiRankings, fetchAiTrainingSummary } from "../services/aiRanking";
 import type { AiRanking, AiTrainingSummary } from "../services/aiRanking";
 import { apiRequest } from "../services/platformApi";
-import { MessagingPanel } from "../components/MessagingPanel";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
   const { logout } = useAuth();
@@ -639,8 +638,6 @@ function CandidateSearch() {
 
 // Interview Management
 function InterviewManagement() {
-  const interviewsState = interviews;
-
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold" style={{ color: "#0a0a0c" }}>Interview Management</h1>

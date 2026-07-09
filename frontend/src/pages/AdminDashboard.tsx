@@ -33,12 +33,11 @@ import {
   candidates as platformCandidates,
   jobs as platformJobs,
   interviews as platformInterviews,
-  complaints as platformComplaints,
   analytics as platformAnalytics,
   applications as platformApplications,
   notifications as platformNotifications,
 } from "../data/mockData";
-import type { Recruiter, Candidate, Complaint, Notification } from "../data/mockData";
+import type { Recruiter, Candidate, Complaint, Notification, Job } from "../data/mockData";
 import { apiRequest, fetchPlatformSnapshot, fetchSystemSettings, saveSystemSettings } from "../services/platformApi";
 
 function Sidebar({ activeTab, setActiveTab, collapsed }: { activeTab: string; setActiveTab: (t: string) => void; collapsed: boolean }) {
@@ -609,7 +608,7 @@ function OpportunitiesManagement() {
             </tr>
           </thead>
           <tbody>
-            {jobsState.map((job) => (
+            {jobs.map((job: Job) => (
               <tr key={job.id} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                 <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{job.title}</td>
                 <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{job.company}</td>
@@ -683,7 +682,7 @@ function AnalyticsReports() {
               </tr>
             </thead>
             <tbody>
-              {analytics.map((d) => (
+              {platformAnalytics.map((d) => (
                 <tr key={d.month} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                   <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{d.month}</td>
                   <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{d.applications}</td>
@@ -738,7 +737,7 @@ function InterviewManagement() {
             </tr>
           </thead>
           <tbody>
-            {interviews.map((int) => (
+            {platformInterviews.map((int) => (
               <tr key={int.id} className="hover:bg-gray-50 transition-colors" style={{ borderBottom: "1px solid #f4f4f4" }}>
                 <td className="py-3 px-2 font-medium" style={{ color: "#0a0a0c" }}>{int.candidateName}</td>
                 <td className="py-3 px-2" style={{ color: "#6c6c6c" }}>{int.jobTitle}</td>

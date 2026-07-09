@@ -30,6 +30,7 @@ export interface Candidate {
   college: string;
   degree: string;
   specialization: string;
+  role?: string;
   graduationYear: string;
   cgpa: number;
   skills: string[];
@@ -55,6 +56,7 @@ export interface Recruiter {
   phone: string;
   avatar: string;
   companyName: string;
+  company?: string;
   companyAddress: string;
   companyWebsite: string;
   industry: string;
@@ -66,6 +68,7 @@ export interface Recruiter {
   jobsPosted: number;
   totalApplications: number;
   hiredCount: number;
+  hires?: number;
 }
 
 export interface Interview {
