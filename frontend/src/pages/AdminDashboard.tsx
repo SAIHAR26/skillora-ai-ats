@@ -36,6 +36,7 @@ import {
   analytics as platformAnalytics,
   applications as platformApplications,
   notifications as platformNotifications,
+  complaints as platformComplaints,
 } from "../data/mockData";
 import type { Recruiter, Candidate, Complaint, Notification, Job } from "../data/mockData";
 import { apiRequest, fetchPlatformSnapshot, fetchSystemSettings, saveSystemSettings } from "../services/platformApi";
@@ -178,13 +179,8 @@ function DashboardHome() {
 function UserManagement() {
   const [activeSubTab, setActiveSubTab] = useState<"recruiters" | "candidates">("recruiters");
   const [search, setSearch] = useState("");
-  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
-
-  useEffect(() => {
-    setRecruiters([...platformRecruiters]);
-    setCandidates([...platformCandidates]);
-  }, [platformRecruiters.length, platformCandidates.length]);
+  const [recruiters, setRecruiters] = useState<Recruiter[]>(() => [...platformRecruiters]);
+  const [candidates, setCandidates] = useState<Candidate[]>(() => [...platformCandidates]);
 
   const filteredRecruiters = recruiters.filter(
     (r) =>
@@ -338,12 +334,8 @@ function UserManagement() {
 
 // Recruiter Verification
 function RecruiterVerification() {
-  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
+  const [recruiters, setRecruiters] = useState<Recruiter[]>(() => platformRecruiters.filter((r) => r.status === "pending"));
   const [recruiterActionError, setRecruiterActionError] = useState("");
-
-  useEffect(() => {
-    setRecruiters([...recruiters].filter((r) => r.status === "pending"));
-  }, [recruiters.length]);
 
   const updateRecruiterStatus = async (id: string, status: string) => {
     try {
@@ -453,15 +445,12 @@ function RecruiterVerification() {
 
 // Opportunities Management
 function OpportunitiesManagement() {
-  const [jobs, setJobs] = useState<Job[]>(platformJobs);
+  const [jobs, setJobs] = useState<Job[]>(() => [...platformJobs]);
   const [showForm, setShowForm] = useState(false);
   const [newJob, setNewJob] = useState({ title: "", company: "", location: "", type: "Remote", salary: "", description: "", skills: "", experience: "", deadline: "" });
   const [savingJob, setSavingJob] = useState(false);
   const [jobError, setJobError] = useState("");
 
-  useEffect(() => {
-    setJobs([...platformJobs]);
-  }, [platformJobs.length]);
 
   const handleCreateJob = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -764,11 +753,7 @@ function InterviewManagement() {
 
 // Feedback & Support
 function FeedbackSupport() {
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
-
-  useEffect(() => {
-    setComplaints([...complaints]);
-  }, [complaints.length]);
+  const [complaints, setComplaints] = useState<Complaint[]>(() => [...platformComplaints]);
 
   const handleResolve = async (id: string) => {
     try {
@@ -828,19 +813,14 @@ function FeedbackSupport() {
 function NotificationCenter() {
   type AdminNotification = Notification & { recipients: string };
 
-  const [notifs, setNotifs] = useState<AdminNotification[]>([]);
-  const [newNotif, setNewNotif] = useState({ title: "", message: "", recipients: "all" });
-
-  useEffect(() => {
-    const next = platformNotifications.map((notification) => ({
+  const [notifs, setNotifs] = useState<AdminNotification[]>(() =>
+    platformNotifications.map((notification) => ({
       ...notification,
       recipients: "all",
       read: notification.read ?? false,
-    }));
-    if (next.length > 0) {
-      setNotifs(next);
-    }
-  }, [platformNotifications.length]);
+    }))
+  );
+  const [newNotif, setNewNotif] = useState({ title: "", message: "", recipients: "all" });
 
   
 
@@ -1105,3 +1085,5 @@ export default function AdminDashboard() {
     </div>
   );
 }
+
+

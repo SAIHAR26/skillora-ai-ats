@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
 const Notification = require("../models/Notification");
 const { idVariants } = require("../services/accessControl");
 
-const notificationFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
+const notificationFilter = (id) => (id && isObjectId(id) ? { _id: toObjectId(id) } : { id });
 
 exports.getNotifications = async (req, res) => {
   const filters = {};
@@ -51,3 +53,4 @@ exports.sendNotification = async (req, res) => {
 
   res.status(201).json({ message: "Notification sent", notification });
 };
+

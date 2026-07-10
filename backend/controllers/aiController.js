@@ -6,7 +6,9 @@ const Resume = require("../models/Resume");
 const { getCandidateRecommendations, getCandidateSkillGap } = require("../services/candidateInsightService");
 const { getRecruiterForUser, getCandidateForUser, idVariants } = require("../services/accessControl");
 const mongoose = require("mongoose");
-const idFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
+const idFilter = (id) => (isObjectId(id) ? { _id: toObjectId(id) } : { id });
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -22,7 +24,7 @@ function serializeSkills(value) {
 
 function mixedDocumentFilter(value) {
   const variants = idVariants(value);
-  const objectIds = variants.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+  const objectIds = variants.filter(isObjectId).map(toObjectId)
   const filters = [{ id: { $in: variants.map(String) } }];
   if (objectIds.length) filters.push({ _id: { $in: objectIds } });
   return { $or: filters };
@@ -33,7 +35,7 @@ function applicationIdsFilter(values) {
   const variants = ids.flatMap((id) => idVariants(String(id).trim())).filter(Boolean);
   if (!variants.length) return null;
 
-  const objectIds = variants.filter((id) => mongoose.Types.ObjectId.isValid(String(id)));
+  const objectIds = variants.filter(isObjectId).map(toObjectId)
   const filters = [{ id: { $in: variants.map(String) } }];
   if (objectIds.length) filters.push({ _id: { $in: objectIds } });
   return { $or: filters };
@@ -60,7 +62,7 @@ async function scoreApplication(application) {
   const [candidate, job, resume] = await Promise.all([
     Candidate.findOne(mixedDocumentFilter(application.candidateId)).lean(),
     Job.findOne(mixedDocumentFilter(application.jobId)).lean(),
-    application.resumeId && mongoose.Types.ObjectId.isValid(String(application.resumeId)) ? Resume.findById(application.resumeId).lean() : null,
+    isObjectId(application.resumeId) ? Resume.findById(toObjectId(application.resumeId)).lean() : null,
   ]);
 
   const resumeText = buildResumeText(candidate, resume, job);
@@ -195,7 +197,7 @@ async function resolveCandidateId(req) {
 
 function candidateFilter(id) {
   if (!id) return { _id: null };
-  return mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id };
+  return isObjectId(id) ? { _id: toObjectId(id) } : { id };
 }
 
 const loadCandidateContext = async (candidateId) => {
@@ -316,3 +318,5 @@ module.exports = {
   scoreResume,
   skillGap,
 };
+
+

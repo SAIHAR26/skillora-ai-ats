@@ -1,8 +1,10 @@
 const Complaint = require("../models/Complaint");
 const Notification = require("../models/Notification");
 const mongoose = require("mongoose");
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
 
-const complaintFilter = (id) => (mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { id });
+const complaintFilter = (id) => (isObjectId(id) ? { _id: toObjectId(id) } : { id });
 
 exports.createComplaint = async (req, res) => {
   const { subject, message, category, priority } = req.body;
@@ -59,3 +61,4 @@ exports.updateComplaintStatus = async (req, res) => {
 
   res.json({ message: "Complaint updated", complaint });
 };
+

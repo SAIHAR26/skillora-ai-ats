@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
 const Recruiter = require("../models/Recruiter");
 const Job = require("../models/Job");
 const Application = require("../models/Application");
@@ -14,7 +16,7 @@ const asyncHandler = (handler) => async (req, res, next) => {
   }
 };
 
-const recruiterFilter = (id) => (mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { id });
+const recruiterFilter = (id) => (isObjectId(id) ? { _id: toObjectId(id) } : { id });
 
 async function canAccessRecruiter(req, recruiter) {
   if (req.user?.role === "admin") return true;
@@ -194,3 +196,4 @@ module.exports = {
   updateRecruiter,
   updateRecruiterStatus,
 };
+

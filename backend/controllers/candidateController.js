@@ -29,7 +29,7 @@ const asyncHandler = (handler) => async (req, res, next) => {
   }
 };
 
-const candidateFilter = (id) => (mongoose.Types.ObjectId.isValid(id) ? { _id: id } : { id });
+const candidateFilter = (id) => (isObjectId(id) ? { _id: toObjectId(id) } : { id });
 const candidateIdentityFilters = (candidate) => {
   const values = [candidate._id, String(candidate._id), candidate.id].filter(Boolean);
   return values.map((value) => ({ candidateId: value }));
@@ -291,3 +291,4 @@ module.exports = {
   listCandidates,
   updateCandidate,
 };
+

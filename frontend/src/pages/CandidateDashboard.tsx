@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
 import {
@@ -801,7 +801,7 @@ export default function CandidateDashboard() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadError, setLoadError] = useState("");
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoadError("");
     try {
       const current = await apiRequest<Candidate>("/candidates/me/profile");
@@ -826,13 +826,13 @@ export default function CandidateDashboard() {
     } catch (caught) {
       setLoadError(caught instanceof Error ? caught.message : "Unable to load candidate dashboard data.");
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (user?.id || user?.email) {
       void refresh();
     }
-  }, [user?.id, user?.email]);
+  }, [refresh, user?.id, user?.email]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -891,3 +891,5 @@ export default function CandidateDashboard() {
     </div>
   );
 }
+
+
