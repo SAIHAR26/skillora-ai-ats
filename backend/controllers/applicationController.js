@@ -5,8 +5,10 @@ const Notification = require("../models/Notification");
 const Recruiter = require("../models/Recruiter");
 const { getCandidateForUser, getRecruiterForUser, idVariants, ownsMixedId } = require("../services/accessControl");
 const mongoose = require("mongoose");
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
 
-const idFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
+const idFilter = (id) => (id && isObjectId(id) ? { _id: toObjectId(id) } : { id });
 const statusLabel = (value) => String(value || "applied").replace(/_/g, " ");
 const openStatuses = ["open", "active"];
 
@@ -258,3 +260,4 @@ exports.deleteApplication = async (req, res) => {
   await application.deleteOne();
   res.json({ message: "Application deleted" });
 };
+

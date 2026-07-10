@@ -31,7 +31,7 @@ import {
 import {
   recruiterStats,
   recruiters,
-  jobs,
+  jobs as mockJobs,
   candidates,
   applications,
   interviews,
@@ -200,7 +200,7 @@ function JobManagement() {
       .catch((err) => {
         if (!cancelled) {
           const recruiterIds = [user?.id, currentRecruiter?.id].filter(Boolean);
-          setJobs(jobs.filter((job) => !job.recruiterId || recruiterIds.includes(job.recruiterId)));
+          setJobs(mockJobs.filter((job) => !job.recruiterId || recruiterIds.includes(job.recruiterId)));
           setError(err instanceof Error ? err.message : "Could not load recruiter jobs");
         }
       })
@@ -721,7 +721,7 @@ function RecruiterAnalytics() {
         <div className="dashboard-card">
           <h3 className="text-base font-semibold mb-4" style={{ color: "#0a0a0c" }}>Applications per Job</h3>
           <div className="space-y-3">
-            {jobs.map((job) => (
+            {mockJobs.map((job) => (
               <div key={job.id}>
                 <div className="flex justify-between text-xs mb-1">
                   <span style={{ color: "#0a0a0c" }}>{job.title}</span>
@@ -1058,6 +1058,8 @@ export default function RecruiterDashboard() {
     </div>
   );
 }
+
+
 
 
 

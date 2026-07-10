@@ -5,7 +5,9 @@ const Notification = require("../models/Notification");
 const Candidate = require("../models/Candidate");
 const { getRecruiterForUser, idVariants, ownsMixedId } = require("../services/accessControl");
 const mongoose = require("mongoose");
-const idFilter = (id) => (id && mongoose.Types.ObjectId.isValid(String(id)) ? { _id: id } : { id });
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
+const idFilter = (id) => (id && isObjectId(id) ? { _id: toObjectId(id) } : { id });
 
 async function assertRecruiterOwnsJob(req, job) {
   if (req.user?.role === "admin") return true;
@@ -105,7 +107,7 @@ exports.listInterviews = async (req, res) => {
   if (candidateId) {
     filters.$or = [{ candidateId: candidateId }];
     if (/^[a-f\d]{24}$/i.test(String(candidateId))) {
-      filters.$or.push({ candidateId: require("mongoose").Types.ObjectId(String(candidateId)) });
+      filters.$or.push({ candidateId: toObjectId(candidateId) });
     }
   }
   if (req.user?.role === "recruiter") {
@@ -186,3 +188,5 @@ exports.updateInterviewStatus = async (req, res) => {
   await interview.save();
   res.json({ message: "Interview status updated", interview });
 };
+
+
