@@ -2,13 +2,16 @@ const Candidate = require("../models/Candidate");
 const Job = require("../models/Job");
 const Resume = require("../models/Resume");
 const aiModelService = require("./aiModelService");
+const mongoose = require("mongoose");
 
 const normalize = (value) => String(value || "").trim().toLowerCase();
 const normalizeList = (items) => [...new Set((Array.isArray(items) ? items : [])
   .map((item) => String(item || "").trim())
   .filter(Boolean))];
 
-const candidateIdFilter = (id) => (id && /^[a-f\d]{24}$/i.test(String(id)) ? { _id: id } : { id });
+const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
+const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
+const candidateIdFilter = (id) => (isObjectId(id) ? { _id: toObjectId(id) } : { id });
 
 function jobSkills(job) {
   return normalizeList([...(job.skillsRequired || []), ...(job.skills || [])]);
@@ -201,3 +204,5 @@ module.exports = {
   getCandidateRecommendations,
   getCandidateSkillGap,
 };
+
+
