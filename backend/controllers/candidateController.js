@@ -1,17 +1,25 @@
 const fs = require("fs/promises");
 const path = require("path");
 const mongoose = require("mongoose");
-const toObjectId = (id) => new mongoose.Types.ObjectId(String(id));
-const isObjectId = (id) => id && mongoose.Types.ObjectId.isValid(String(id));
-const pdfParse = require("pdf-parse");
-const mammoth = require("mammoth");
+let pdfParse = null;
+let mammoth = null;
+try {
+  pdfParse = require("pdf-parse");
+} catch (_error) {
+  pdfParse = null;
+}
+try {
+  mammoth = require("mammoth");
+} catch (_error) {
+  mammoth = null;
+}
 const Candidate = require("../models/Candidate");
 const Notification = require("../models/Notification");
 const Resume = require("../models/Resume");
 const Application = require("../models/Application");
 const aiModelService = require("../services/aiModelService");
 const { toClient } = require("../services/platformDataService");
-const { getCandidateRecommendations } = require("../services/candidateInsightService");
+const { getCandidateRecommendations, getCandidateSkillGap } = require("../services/candidateInsightService");
 
 const asyncHandler = (handler) => async (req, res, next) => {
   try {
@@ -130,10 +138,16 @@ async function extractTextFromFile(file) {
     return "";
   }
   if (extension === ".pdf" || file.mimetype === "application/pdf") {
+    if (!pdfParse) {
+      throw new Error("PDF resume parsing is unavailable until backend dependencies are installed.");
+    }
     const parsed = await pdfParse(buffer);
     return parsed.text || "";
   }
   if (extension === ".docx" || file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    if (!mammoth) {
+      throw new Error("DOCX resume parsing is unavailable until backend dependencies are installed.");
+    }
     const parsed = await mammoth.extractRawText({ buffer });
     return parsed.value || "";
   }
@@ -257,12 +271,23 @@ const getCandidateApplications = asyncHandler(async (req, res) => {
   return res.json(applications);
 });
 
+const getCandidateSkillGapAnalysis = asyncHandler(async (req, res) => {
+  const candidate = await Candidate.findOne(candidateFilter(req.params.id)).lean();
+  if (!candidate) {
+    return res.status(404).json({ message: "Candidate not found" });
+  }
+
+  const result = await getCandidateSkillGap(candidate._id, req.query.jobId);
+  return res.json(result);
+});
+
 module.exports = {
   addResume,
   getCurrentCandidate,
   getCandidate,
   getCandidateApplications,
   getCandidateResumes,
+  getCandidateSkillGapAnalysis,
   listCandidates,
   updateCandidate,
 };

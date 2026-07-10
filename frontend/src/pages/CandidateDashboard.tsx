@@ -26,7 +26,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { fetchSkillGap, recommendJobs } from "../services/aiRanking";
+import { recommendJobs } from "../services/aiRanking";
 import type { JobRecommendation, ResumeScoreResult, SkillGapResult } from "../services/aiRanking";
 import { apiRequest, uploadResume } from "../services/platformApi";
 
@@ -544,7 +544,8 @@ function SkillGapAnalysis({ candidate }: { candidate: Candidate | null }) {
       setGap(null);
       return;
     }
-    fetchSkillGap(candidateId)
+    setError("");
+    apiRequest<SkillGapResult>(`/candidates/${encodeURIComponent(candidateId)}/skill-gap`)
       .then(setGap)
       .catch((caught) => setError(caught instanceof Error ? caught.message : "Unable to load skill gap analysis."));
   }, [candidate]);
